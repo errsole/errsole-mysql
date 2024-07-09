@@ -18,6 +18,7 @@ describe('ErrsoleMySQL', () => {
   let errsoleMySQL;
   let poolMock;
   let connectionMock;
+  let originalConsoleError;
 
   beforeEach(() => {
     connectionMock = {
@@ -40,10 +41,17 @@ describe('ErrsoleMySQL', () => {
       connectionLimit: 10,
       queueLimit: 0
     });
+
+    // Suppress console.error
+    originalConsoleError = console.error;
+    console.error = jest.fn();
   });
 
   afterEach(() => {
     jest.clearAllMocks();
+
+    // Restore console.error
+    console.error = originalConsoleError;
   });
 
   describe('initialize', () => {
@@ -112,13 +120,32 @@ describe('ErrsoleMySQL', () => {
   });
 
   describe('postLogs', () => {
-    it('should insert log entries', async () => {
-      const logEntry = [{ timestamp: new Date(), hostname: 'localhost', pid: 1234, source: 'test', level: 'info', message: 'test message', meta: 'meta' }];
-      poolMock.query.mockImplementation((query, values, cb) => cb(null, {}));
+    it('should add log entries to pending logs', async () => {
+      const logEntries = [
+        { timestamp: new Date(), hostname: 'localhost', pid: 1234, source: 'test', level: 'info', message: 'test message', meta: 'meta' }
+      ];
+      errsoleMySQL.postLogs(logEntries);
 
-      await errsoleMySQL.postLogs(logEntry);
+      expect(errsoleMySQL.pendingLogs).toHaveLength(1);
+      expect(errsoleMySQL.pendingLogs[0]).toEqual(logEntries[0]);
+    });
 
-      expect(poolMock.query).toHaveBeenCalled();
+    it('should call flushLogs if pending logs exceed batch size', async () => {
+      const logEntries = Array.from({ length: errsoleMySQL.batchSize + 1 }, (_, i) => ({
+        timestamp: new Date(),
+        hostname: 'localhost',
+        pid: 1234,
+        source: 'test',
+        level: 'info',
+        message: `test message ${i}`,
+        meta: 'meta'
+      }));
+
+      const flushLogsSpy = jest.spyOn(errsoleMySQL, 'flushLogs').mockImplementation(() => Promise.resolve({}));
+
+      errsoleMySQL.postLogs(logEntries);
+
+      expect(flushLogsSpy).toHaveBeenCalled();
     });
   });
 
@@ -170,29 +197,55 @@ describe('ErrsoleMySQL', () => {
 
       await expect(errsoleMySQL.createUser({ name: 'test', email: 'test@example.com', password: 'password', role: 'admin' })).rejects.toThrow('A user with the provided email already exists.');
     });
+
+    it('should handle query errors', async () => {
+      const mockHashedPassword = 'hashedPassword';
+      bcrypt.hash.mockResolvedValue(mockHashedPassword);
+      poolMock.query.mockImplementation((query, values, cb) => cb(new Error('Query error')));
+
+      await expect(errsoleMySQL.createUser({ name: 'test', email: 'test@example.com', password: 'password', role: 'admin' })).rejects.toThrow('Query error');
+    });
   });
 
   describe('verifyUser', () => {
-    it('should verify user credentials', async () => {
-      bcrypt.compare.mockResolvedValue(true);
-      poolMock.query.mockImplementation((query, values, cb) => cb(null, [{ id: 1, name: 'test', email: 'test@example.com', hashed_password: 'hashedPassword', role: 'admin' }]));
-
-      const user = await errsoleMySQL.verifyUser('test@example.com', 'password');
-
-      expect(user).toEqual({ item: { id: 1, name: 'test', email: 'test@example.com', role: 'admin' } });
+    it('should throw an error if email or password is missing', async () => {
+      await expect(errsoleMySQL.verifyUser('', 'password')).rejects.toThrow('Both email and password are required for verification.');
+      await expect(errsoleMySQL.verifyUser('test@example.com', '')).rejects.toThrow('Both email and password are required for verification.');
     });
 
-    it('should throw error if user not found', async () => {
+    it('should verify user credentials', async () => {
+      const user = { id: 1, name: 'test', email: 'test@example.com', hashed_password: 'hashedPassword', role: 'admin' };
+      bcrypt.compare.mockResolvedValue(true);
+      poolMock.query.mockImplementation((query, values, cb) => cb(null, [user]));
+
+      const result = await errsoleMySQL.verifyUser('test@example.com', 'password');
+
+      expect(result).toEqual({ item: { id: 1, name: 'test', email: 'test@example.com', role: 'admin' } });
+      expect(poolMock.query).toHaveBeenCalledWith('SELECT * FROM errsole_users WHERE email = ?', ['test@example.com'], expect.any(Function));
+      expect(bcrypt.compare).toHaveBeenCalledWith('password', 'hashedPassword');
+    });
+
+    it('should throw an error if user is not found', async () => {
       poolMock.query.mockImplementation((query, values, cb) => cb(null, []));
 
-      await expect(errsoleMySQL.verifyUser('test@example.com', 'password')).rejects.toThrow(new Error('User not found.'));
+      await expect(errsoleMySQL.verifyUser('test@example.com', 'password')).rejects.toThrow('User not found.');
+      expect(poolMock.query).toHaveBeenCalledWith('SELECT * FROM errsole_users WHERE email = ?', ['test@example.com'], expect.any(Function));
     });
 
-    it('should throw error if password is incorrect', async () => {
+    it('should throw an error if password is incorrect', async () => {
+      const user = { id: 1, name: 'test', email: 'test@example.com', hashed_password: 'hashedPassword', role: 'admin' };
       bcrypt.compare.mockResolvedValue(false);
-      poolMock.query.mockImplementation((query, values, cb) => cb(null, [{ id: 1, name: 'test', email: 'test@example.com', hashed_password: 'hashedPassword', role: 'admin' }]));
+      poolMock.query.mockImplementation((query, values, cb) => cb(null, [user]));
 
-      await expect(errsoleMySQL.verifyUser('test@example.com', 'password')).rejects.toThrow(new Error('Incorrect password.'));
+      await expect(errsoleMySQL.verifyUser('test@example.com', 'wrongPassword')).rejects.toThrow('Incorrect password.');
+      expect(poolMock.query).toHaveBeenCalledWith('SELECT * FROM errsole_users WHERE email = ?', ['test@example.com'], expect.any(Function));
+      expect(bcrypt.compare).toHaveBeenCalledWith('wrongPassword', 'hashedPassword');
+    });
+
+    it('should handle query errors', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => cb(new Error('Query error')));
+
+      await expect(errsoleMySQL.verifyUser('test@example.com', 'password')).rejects.toThrow('Query error');
     });
   });
 
@@ -278,6 +331,40 @@ describe('ErrsoleMySQL', () => {
       poolMock.query.mockImplementation((query, values, cb) => cb(null, { affectedRows: 0 }));
 
       await expect(errsoleMySQL.deleteUser(1)).rejects.toThrow(new Error('User not found.'));
+    });
+  });
+
+  describe('getMeta', () => {
+    it('should retrieve meta data for a log entry', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => {
+        expect(query).toContain('SELECT id, meta FROM errsole_logs_v1 WHERE id = ?');
+        expect(values).toEqual([1]);
+        cb(null, [{ id: 1, meta: 'meta data' }]);
+      });
+
+      const meta = await errsoleMySQL.getMeta(1);
+
+      expect(meta).toEqual({ item: { id: 1, meta: 'meta data' } });
+    });
+
+    it('should throw an error if log entry is not found', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => {
+        expect(query).toContain('SELECT id, meta FROM errsole_logs_v1 WHERE id = ?');
+        expect(values).toEqual([1]);
+        cb(null, []);
+      });
+
+      await expect(errsoleMySQL.getMeta(1)).rejects.toThrow('Log entry not found.');
+    });
+
+    it('should handle query errors', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => {
+        expect(query).toContain('SELECT id, meta FROM errsole_logs_v1 WHERE id = ?');
+        expect(values).toEqual([1]);
+        cb(new Error('Query error'));
+      });
+
+      await expect(errsoleMySQL.getMeta(1)).rejects.toThrow('Query error');
     });
   });
 });
