@@ -342,6 +342,10 @@ describe('ErrsoleMySQL', () => {
   });
 
   describe('#searchLogs', () => {
+    afterEach(() => {
+      jest.clearAllMocks();
+    });
+
     it('should search log entries based on search terms without filters', async () => {
       poolMock.query.mockImplementation((query, values, cb) => cb(null, [
         { id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }
@@ -349,7 +353,7 @@ describe('ErrsoleMySQL', () => {
 
       const logs = await errsoleMySQL.searchLogs(['test']);
 
-      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }] });
+      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }], filters: { limit: 100 } });
       expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['%test%']), expect.any(Function));
     });
 
@@ -360,7 +364,7 @@ describe('ErrsoleMySQL', () => {
 
       const logs = await errsoleMySQL.searchLogs(['test'], { hostname: 'localhost' });
 
-      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }] });
+      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }], filters: { hostname: 'localhost', limit: 100 } });
       expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['%test%', 'localhost']), expect.any(Function));
     });
 
@@ -371,7 +375,7 @@ describe('ErrsoleMySQL', () => {
 
       const logs = await errsoleMySQL.searchLogs(['test'], { pid: 1234 });
 
-      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }] });
+      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }], filters: { pid: 1234, limit: 100 } });
       expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['%test%', 1234]), expect.any(Function));
     });
 
@@ -382,7 +386,7 @@ describe('ErrsoleMySQL', () => {
 
       const logs = await errsoleMySQL.searchLogs(['test'], { sources: ['test'] });
 
-      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }] });
+      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }], filters: { sources: ['test'], limit: 100 } });
       expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['%test%', ['test']]), expect.any(Function));
     });
 
@@ -393,7 +397,7 @@ describe('ErrsoleMySQL', () => {
 
       const logs = await errsoleMySQL.searchLogs(['test'], { levels: ['info'] });
 
-      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }] });
+      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }], filters: { levels: ['info'], limit: 100 } });
       expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['%test%', ['info']]), expect.any(Function));
     });
 
@@ -404,7 +408,7 @@ describe('ErrsoleMySQL', () => {
 
       const logs = await errsoleMySQL.searchLogs(['test'], { level_json: [{ source: 'test', level: 'info' }] });
 
-      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }] });
+      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }], filters: { level_json: [{ source: 'test', level: 'info' }], limit: 100 } });
       expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['%test%', 'test', 'info']), expect.any(Function));
     });
 
@@ -415,7 +419,7 @@ describe('ErrsoleMySQL', () => {
 
       const logs = await errsoleMySQL.searchLogs(['test'], { lt_id: 2 });
 
-      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }] });
+      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }], filters: { lt_id: 2, limit: 100 } });
       expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['%test%', 2, 100]), expect.any(Function));
     });
 
@@ -426,7 +430,7 @@ describe('ErrsoleMySQL', () => {
 
       const logs = await errsoleMySQL.searchLogs(['test'], { gt_id: 2 });
 
-      expect(logs).toEqual({ items: [{ id: 3, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }] });
+      expect(logs).toEqual({ items: [{ id: 3, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }], filters: { gt_id: 2, limit: 100 } });
       expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['%test%', 2, 100]), expect.any(Function));
     });
 
@@ -437,7 +441,7 @@ describe('ErrsoleMySQL', () => {
 
       const logs = await errsoleMySQL.searchLogs(['test'], { lte_timestamp: new Date('2023-01-02'), gte_timestamp: new Date('2023-01-01') });
 
-      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }] });
+      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }], filters: { lte_timestamp: new Date('2023-01-02'), gte_timestamp: new Date('2023-01-01'), limit: 100 } });
       expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['%test%', new Date('2023-01-02'), new Date('2023-01-01'), 100]), expect.any(Function));
     });
 
