@@ -57,7 +57,13 @@ describe('ErrsoleMySQL', () => {
   describe('#initialize', () => {
     it('should initialize properly', async () => {
       poolMock.getConnection.mockImplementation((cb) => cb(null, { release: jest.fn() }));
-      poolMock.query.mockImplementation((query, cb) => cb(null, [{ Value: '8388608' }]));
+      poolMock.query.mockImplementation((query, values, cb) => {
+        if (typeof values === 'function') {
+          cb = values;
+          values = null;
+        }
+        cb(null, [{ Value: '8388608' }]);
+      });
 
       await errsoleMySQL.initialize();
 
@@ -97,12 +103,12 @@ describe('ErrsoleMySQL', () => {
     });
   });
 
-  describe('#setBufferSizes', () => {
+  describe('#setBufferSize', () => {
     it('should set buffer sizes if current size is less than desired size', async () => {
       jest.spyOn(errsoleMySQL, 'getBufferSize').mockResolvedValue(1024 * 1024); // 1 MB
       poolMock.query.mockImplementation((query, cb) => cb(null, {}));
 
-      await errsoleMySQL.setBufferSizes();
+      await errsoleMySQL.setBufferSize();
 
       expect(poolMock.query).toHaveBeenCalledWith('SET SESSION sort_buffer_size = 8388608', expect.any(Function));
     });
@@ -110,7 +116,7 @@ describe('ErrsoleMySQL', () => {
     it('should not set buffer sizes if current size is greater than or equal to desired size', async () => {
       jest.spyOn(errsoleMySQL, 'getBufferSize').mockResolvedValue(8 * 1024 * 1024); // 8 MB
 
-      await errsoleMySQL.setBufferSizes();
+      await errsoleMySQL.setBufferSize();
 
       expect(poolMock.query).not.toHaveBeenCalledWith('SET SESSION sort_buffer_size = 8388608', expect.any(Function));
     });
