@@ -1,6 +1,5 @@
 # errsole-mysql 
-<a href="https://coveralls.io/github/errsole/errsole.js"><img src="https://coveralls.io/repos/github/errsole/errsole.js/badge.svg" alt="Coverage Status" /></a>
-
+<a href="https://coveralls.io/github/errsole/errsole-mysql"><img src="https://coveralls.io/repos/github/errsole/errsole-mysql/badge.svg" alt="Coverage Status" /></a>
 
 MySQL storage plugin for Errsole. 
 
