@@ -451,6 +451,34 @@ describe('ErrsoleMySQL', () => {
       expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['%test%', new Date('2023-01-02'), new Date('2023-01-01'), 100]), expect.any(Function));
     });
 
+    it('should search log entries with only lte_timestamp', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => cb(null, [
+        { id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }
+      ]));
+
+      const logs = await errsoleMySQL.searchLogs(['test'], { lte_timestamp: new Date('2023-01-02') });
+
+      expect(logs).toEqual({
+        items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }],
+        filters: { lte_timestamp: new Date('2023-01-02'), gte_timestamp: new Date('2023-01-01'), limit: 100 }
+      });
+      expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['%test%', new Date('2023-01-02'), new Date('2023-01-01'), 100]), expect.any(Function));
+    });
+
+    it('should search log entries with only gte_timestamp', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => cb(null, [
+        { id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }
+      ]));
+
+      const logs = await errsoleMySQL.searchLogs(['test'], { gte_timestamp: new Date('2023-01-01') });
+
+      expect(logs).toEqual({
+        items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }],
+        filters: { gte_timestamp: new Date('2023-01-01'), lte_timestamp: new Date('2023-01-02'), limit: 100 }
+      });
+      expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['%test%', new Date('2023-01-02'), new Date('2023-01-01'), 100]), expect.any(Function));
+    });
+
     it('should handle errors in searching logs', async () => {
       poolMock.query.mockImplementation((query, values, cb) => cb(new Error('Query error')));
 
