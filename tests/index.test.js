@@ -209,6 +209,56 @@ describe('ErrsoleMySQL', () => {
       await expect(errsoleMySQL.deleteConfig('logsTTL')).rejects.toThrow('Configuration not found.');
     });
   });
+  describe('#ensureLogsTTL', () => {
+    let getConfigSpy;
+    let setConfigSpy;
+
+    beforeEach(() => {
+      getConfigSpy = jest.spyOn(errsoleMySQL, 'getConfig');
+      setConfigSpy = jest.spyOn(errsoleMySQL, 'setConfig').mockResolvedValue();
+    });
+
+    afterEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should set default TTL if no configuration is found', async () => {
+      getConfigSpy.mockResolvedValue({ item: null });
+
+      await errsoleMySQL.ensureLogsTTL();
+
+      expect(getConfigSpy).toHaveBeenCalledWith('logsTTL');
+      expect(setConfigSpy).toHaveBeenCalledWith('logsTTL', (30 * 24 * 60 * 60 * 1000).toString());
+    });
+
+    it('should not alter configuration if TTL is already set', async () => {
+      getConfigSpy.mockResolvedValue({ item: { key: 'logsTTL', value: '2592000000' } });
+
+      await errsoleMySQL.ensureLogsTTL();
+
+      expect(getConfigSpy).toHaveBeenCalledWith('logsTTL');
+      expect(setConfigSpy).not.toHaveBeenCalled();
+    });
+
+    it('should handle errors during getConfig', async () => {
+      getConfigSpy.mockRejectedValue(new Error('Query error'));
+
+      await expect(errsoleMySQL.ensureLogsTTL()).rejects.toThrow('Query error');
+
+      expect(getConfigSpy).toHaveBeenCalledWith('logsTTL');
+      expect(setConfigSpy).not.toHaveBeenCalled();
+    });
+
+    it('should handle errors during setConfig', async () => {
+      getConfigSpy.mockResolvedValue({ item: null });
+      setConfigSpy.mockRejectedValue(new Error('Set config error'));
+
+      await expect(errsoleMySQL.ensureLogsTTL()).rejects.toThrow('Set config error');
+
+      expect(getConfigSpy).toHaveBeenCalledWith('logsTTL');
+      expect(setConfigSpy).toHaveBeenCalledWith('logsTTL', (30 * 24 * 60 * 60 * 1000).toString());
+    });
+  });
 
   describe('#postLogs', () => {
     it('should add log entries to pending logs', async () => {
