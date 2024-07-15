@@ -746,6 +746,7 @@ describe('ErrsoleMySQL', () => {
       getConfigSpy = jest.spyOn(errsoleMySQL, 'getConfig').mockResolvedValue({ item: { key: 'logsTTL', value: '2592000000' } });
       poolQuerySpy = jest.spyOn(poolMock, 'query');
       setTimeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation((callback) => callback());
+      errsoleMySQL.deleteExpiredLogsRunning = false; // Reset the flag before each test
     });
 
     afterEach(() => {
@@ -766,6 +767,59 @@ describe('ErrsoleMySQL', () => {
         expect.any(Function)
       );
       expect(setTimeoutSpy).toHaveBeenCalled();
+    });
+
+    it('should handle error in pool.query', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      poolQuerySpy.mockImplementationOnce((query, values, cb) => cb(new Error('Test error')));
+
+      await errsoleMySQL.deleteExpiredLogs();
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(new Error('Test error'));
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should handle invalid TTL from config', async () => {
+      getConfigSpy.mockResolvedValueOnce({ item: { key: 'logsTTL', value: 'invalid' } });
+      poolQuerySpy
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1000 }))
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 0 }));
+
+      await errsoleMySQL.deleteExpiredLogs();
+
+      expect(getConfigSpy).toHaveBeenCalledWith('logsTTL');
+      expect(poolQuerySpy).toHaveBeenCalledWith(
+        'DELETE FROM errsole_logs_v1 WHERE timestamp < ? LIMIT 1000',
+        [expect.any(String)],
+        expect.any(Function)
+      );
+      expect(setTimeoutSpy).toHaveBeenCalled();
+    });
+
+    it('should use default TTL if config is not found', async () => {
+      getConfigSpy.mockResolvedValueOnce({ item: null });
+      poolQuerySpy
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1000 }))
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 0 }));
+
+      await errsoleMySQL.deleteExpiredLogs();
+
+      expect(getConfigSpy).toHaveBeenCalledWith('logsTTL');
+      expect(poolQuerySpy).toHaveBeenCalledWith(
+        'DELETE FROM errsole_logs_v1 WHERE timestamp < ? LIMIT 1000',
+        [expect.any(String)],
+        expect.any(Function)
+      );
+      expect(setTimeoutSpy).toHaveBeenCalled();
+    });
+
+    it('should reset deleteExpiredLogsRunning flag after execution', async () => {
+      poolQuerySpy
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 0 }));
+
+      await errsoleMySQL.deleteExpiredLogs();
+
+      expect(errsoleMySQL.deleteExpiredLogsRunning).toBe(false);
     });
   });
 });
