@@ -1,9 +1,8 @@
 const mysql = require('mysql2');
 const bcrypt = require('bcryptjs');
 const ErrsoleMySQL = require('../lib/index'); // Adjust the path as needed
-const { describe } = require('@jest/globals');
-
-/* globals expect, jest, beforeEach, it, afterEach */
+const cron = require('node-cron');
+/* globals expect, jest, beforeEach, it, afterEach, describe, afterAll */
 
 jest.mock('mysql2', () => ({
   createPool: jest.fn()
@@ -19,6 +18,7 @@ describe('ErrsoleMySQL', () => {
   let poolMock;
   let connectionMock;
   let originalConsoleError;
+  let cronJob;
 
   beforeEach(() => {
     connectionMock = {
@@ -42,6 +42,12 @@ describe('ErrsoleMySQL', () => {
       queueLimit: 0
     });
 
+    // Mock setInterval and cron.schedule
+    jest.useFakeTimers();
+    jest.spyOn(global, 'setInterval');
+    cronJob = { stop: jest.fn() };
+    jest.spyOn(cron, 'schedule').mockReturnValue(cronJob);
+
     // Suppress console.error
     originalConsoleError = console.error;
     console.error = jest.fn();
@@ -49,9 +55,17 @@ describe('ErrsoleMySQL', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
-
+    jest.useRealTimers();
     // Restore console.error
     console.error = originalConsoleError;
+    // Clear the interval if it was set
+    if (errsoleMySQL.flushIntervalId) {
+      clearInterval(errsoleMySQL.flushIntervalId);
+    }
+    // Stop the cron job
+    if (cronJob) {
+      cronJob.stop();
+    }
   });
 
   describe('#initialize', () => {
@@ -70,6 +84,8 @@ describe('ErrsoleMySQL', () => {
       expect(poolMock.getConnection).toHaveBeenCalled();
       expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.any(Function));
       expect(errsoleMySQL.isConnectionInProgress).toBe(false);
+      expect(setInterval).toHaveBeenCalled();
+      expect(cron.schedule).toHaveBeenCalled();
     });
   });
 
@@ -121,7 +137,6 @@ describe('ErrsoleMySQL', () => {
       expect(poolMock.query).not.toHaveBeenCalledWith('SET SESSION sort_buffer_size = 8388608', expect.any(Function));
     });
   });
-
   describe('#createTables', () => {
     it('should create tables if they do not exist', async () => {
       poolMock.query.mockImplementation((query, cb) => cb(null, { affectedRows: 1 }));
@@ -899,5 +914,15 @@ describe('ErrsoleMySQL', () => {
 
       expect(errsoleMySQL.deleteExpiredLogsRunning).toBe(false);
     });
+  });
+
+  afterAll(() => {
+    // Ensure to clear any remaining intervals and cron jobs
+    if (errsoleMySQL.flushIntervalId) {
+      clearInterval(errsoleMySQL.flushIntervalId);
+    }
+    if (cronJob) {
+      cronJob.stop();
+    }
   });
 });
