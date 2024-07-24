@@ -19,7 +19,7 @@
   "license": "MIT",
   "dependencies": {
     "bcryptjs": "^2.4.3",
-    "mysql2": "^2.3.3",
+    "mysql2": "^3.10.1",
     "node-cron": "^3.0.3"
   },
   "files": [
