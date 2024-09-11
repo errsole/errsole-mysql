@@ -23,6 +23,7 @@ declare module 'errsole-mysql' {
     lte_timestamp?: Date;
     gte_timestamp?: Date;
     limit?: number;
+    errsole_id?: number;
   }
 
   interface Config {
@@ -44,7 +45,7 @@ declare module 'errsole-mysql' {
     getConfig(key: string): Promise<{ item: Config }>;
     setConfig(key: string, value: string): Promise<{ item: Config }>;
     deleteConfig(key: string): Promise<{}>;
-
+    getHostnames(): Promise<{ items: string[] }>;
     postLogs(logEntries: Log[]): Promise<{}>;
     getLogs(filters?: LogFilter): Promise<{ items: Log[] }>;
     searchLogs(searchTerms: string[], filters?: LogFilter): Promise<{ items: Log[], filters: LogFilter[] }>;
