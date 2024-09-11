@@ -328,6 +328,19 @@ describe('ErrsoleMySQL', () => {
       expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), ['localhost', 100], expect.any(Function));
     });
 
+    it('should retrieve log entries filtered by hostnames', async () => {
+      const mockResults = [
+        { id: 1, hostname: 'host1', pid: 1234, source: 'test', level: 'info', message: 'test message' }
+      ];
+
+      poolMock.query.mockImplementation((query, values, cb) => cb(null, mockResults));
+
+      const logs = await errsoleMySQL.getLogs({ hostnames: ['host1', 'host2'] });
+
+      expect(poolMock.query).toHaveBeenCalledWith(expect.stringContaining('hostname IN (?)'), [['host1', 'host2'], 100], expect.any(Function));
+      expect(logs).toEqual({ items: mockResults });
+    });
+
     it('should retrieve log entries with pid filter', async () => {
       poolMock.query.mockImplementation((query, values, cb) => cb(null, [
         { id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }
@@ -370,6 +383,44 @@ describe('ErrsoleMySQL', () => {
 
       expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: '2023-01-01 00:00:00', level: 'info', message: 'test message' }] });
       expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), ['test', 'info', 100], expect.any(Function));
+    });
+
+    it('should retrieve log entries filtered by errsole_id', async () => {
+      const mockResults = [
+        { id: 1, hostname: 'host1', pid: 1234, source: 'test', level: 'info', message: 'test message' }
+      ];
+
+      poolMock.query.mockImplementation((query, values, cb) => cb(null, mockResults));
+
+      const logs = await errsoleMySQL.getLogs({ errsole_id: '123abc' });
+
+      expect(poolMock.query).toHaveBeenCalledWith(
+        expect.stringContaining('errsole_id = ?'),
+        ['123abc', 100],
+        expect.any(Function)
+      );
+      expect(logs).toEqual({ items: mockResults });
+    });
+
+    it('should retrieve log entries filtered by level_json and errsole_id', async () => {
+      const mockResults = [
+        { id: 1, hostname: 'host1', pid: 1234, source: 'test', level: 'info', message: 'test message' }
+      ];
+
+      poolMock.query.mockImplementation((query, values, cb) => cb(null, mockResults));
+
+      const filters = {
+        level_json: [{ source: 'test', level: 'info' }],
+        errsole_id: '123abc'
+      };
+      const logs = await errsoleMySQL.getLogs(filters);
+
+      expect(poolMock.query).toHaveBeenCalledWith(
+        expect.stringContaining('((source = ? AND level = ?)) OR errsole_id = ?'), // Update the string to match the actual query
+        ['test', 'info', '123abc', 100],
+        expect.any(Function)
+      );
+      expect(logs).toEqual({ items: mockResults });
     });
 
     it('should retrieve log entries with lt_id filter', async () => {
@@ -542,6 +593,61 @@ describe('ErrsoleMySQL', () => {
         filters: { gte_timestamp: new Date('2023-01-01'), lte_timestamp: new Date('2023-01-02'), limit: 100 }
       });
       expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(['%test%', new Date('2023-01-02'), new Date('2023-01-01'), 100]), expect.any(Function));
+    });
+
+    it('should search log entries filtered by hostnames', async () => {
+      const mockResults = [
+        { id: 1, hostname: 'host1', pid: 1234, source: 'test', level: 'info', message: 'test message' }
+      ];
+
+      poolMock.query.mockImplementation((query, values, cb) => cb(null, mockResults));
+
+      const logs = await errsoleMySQL.searchLogs(['test'], { hostnames: ['host1', 'host2'] });
+
+      expect(poolMock.query).toHaveBeenCalledWith(
+        expect.stringContaining('hostname IN (?)'),
+        expect.arrayContaining(['%test%', ['host1', 'host2']]),
+        expect.any(Function)
+      );
+      expect(logs).toEqual({ items: mockResults, filters: { hostnames: ['host1', 'host2'], limit: 100 } });
+    });
+
+    it('should search log entries filtered by errsole_id', async () => {
+      const mockResults = [
+        { id: 1, hostname: 'host1', pid: 1234, source: 'test', level: 'info', message: 'test message' }
+      ];
+
+      poolMock.query.mockImplementation((query, values, cb) => cb(null, mockResults));
+
+      const logs = await errsoleMySQL.searchLogs(['test'], { errsole_id: '123abc' });
+
+      expect(poolMock.query).toHaveBeenCalledWith(
+        expect.stringContaining('errsole_id = ?'),
+        expect.arrayContaining(['%test%', '123abc']),
+        expect.any(Function)
+      );
+      expect(logs).toEqual({ items: mockResults, filters: { errsole_id: '123abc', limit: 100 } });
+    });
+
+    it('should search log entries filtered by level_json and errsole_id', async () => {
+      const mockResults = [
+        { id: 1, hostname: 'host1', pid: 1234, source: 'test', level: 'info', message: 'test message' }
+      ];
+
+      poolMock.query.mockImplementation((query, values, cb) => cb(null, mockResults));
+
+      const filters = {
+        level_json: [{ source: 'test', level: 'info' }],
+        errsole_id: '123abc'
+      };
+      const logs = await errsoleMySQL.searchLogs(['test'], filters);
+
+      expect(poolMock.query).toHaveBeenCalledWith(
+        expect.stringContaining('message LIKE ? AND (((source = ? AND level = ?)) OR errsole_id = ?)'),
+        expect.arrayContaining(['%test%', 'test', 'info', '123abc', 100]), // Adjusted to include the "LIKE" condition and limit
+        expect.any(Function)
+      );
+      expect(logs).toEqual({ items: mockResults, filters: { level_json: [{ source: 'test', level: 'info' }], errsole_id: '123abc', limit: 100 } });
     });
 
     it('should handle errors in searching logs', async () => {
@@ -913,6 +1019,67 @@ describe('ErrsoleMySQL', () => {
       await errsoleMySQL.deleteExpiredLogs();
 
       expect(errsoleMySQL.deleteExpiredLogsRunning).toBe(false);
+    });
+  });
+
+  describe('#getHostnames', () => {
+    let poolMock;
+
+    beforeEach(() => {
+      poolMock = {
+        query: jest.fn()
+      };
+
+      errsoleMySQL = new ErrsoleMySQL({
+        host: 'localhost',
+        user: 'username',
+        password: 'password',
+        database: 'errsole_db',
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0
+      });
+
+      errsoleMySQL.pool = poolMock;
+    });
+
+    afterEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should retrieve distinct hostnames and return them sorted', async () => {
+      const mockResults = [
+        { hostname: 'host3' },
+        { hostname: 'host1' },
+        { hostname: 'host2' }
+      ];
+
+      poolMock.query.mockImplementation((query, cb) => cb(null, mockResults));
+
+      const result = await errsoleMySQL.getHostnames();
+
+      expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.any(Function));
+      expect(result).toEqual({ items: ['host1', 'host2', 'host3'] });
+    });
+
+    it('should return an empty list if no hostnames are found', async () => {
+      const mockResults = [];
+
+      poolMock.query.mockImplementation((query, cb) => cb(null, mockResults));
+
+      const result = await errsoleMySQL.getHostnames();
+
+      expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.any(Function));
+      expect(result).toEqual({ items: [] });
+    });
+
+    it('should handle errors thrown by the query', async () => {
+      const mockError = new Error('Query error');
+
+      poolMock.query.mockImplementation((query, cb) => cb(mockError));
+
+      await expect(errsoleMySQL.getHostnames()).rejects.toThrow('Query error');
+      expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.any(Function));
     });
   });
 
