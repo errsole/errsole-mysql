@@ -10,6 +10,8 @@ declare module 'errsole-mysql' {
     level: string;
     message: string;
     meta?: string;
+    errsole_id?: number;
+
   }
 
   interface LogFilter {
