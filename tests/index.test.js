@@ -143,7 +143,7 @@ describe('ErrsoleMySQL', () => {
 
       await errsoleMySQL.createTables();
 
-      expect(poolMock.query).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS `errsole_logs_v1`'), expect.any(Function));
+      expect(poolMock.query).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS `errsole_logs_v2`'), expect.any(Function));
       expect(poolMock.query).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS `errsole_users`'), expect.any(Function));
       expect(poolMock.query).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS `errsole_config`'), expect.any(Function));
     });
@@ -799,7 +799,7 @@ describe('ErrsoleMySQL', () => {
   describe('#getMeta', () => {
     it('should retrieve meta data for a log entry', async () => {
       poolMock.query.mockImplementation((query, values, cb) => {
-        expect(query).toContain('SELECT id, meta FROM errsole_logs_v1 WHERE id = ?');
+        expect(query).toContain('SELECT id, meta FROM errsole_logs_v2 WHERE id = ?');
         expect(values).toEqual([1]);
         cb(null, [{ id: 1, meta: 'meta data' }]);
       });
@@ -811,7 +811,7 @@ describe('ErrsoleMySQL', () => {
 
     it('should throw an error if log entry is not found', async () => {
       poolMock.query.mockImplementation((query, values, cb) => {
-        expect(query).toContain('SELECT id, meta FROM errsole_logs_v1 WHERE id = ?');
+        expect(query).toContain('SELECT id, meta FROM errsole_logs_v2 WHERE id = ?');
         expect(values).toEqual([1]);
         cb(null, []);
       });
@@ -821,7 +821,7 @@ describe('ErrsoleMySQL', () => {
 
     it('should handle query errors', async () => {
       poolMock.query.mockImplementation((query, values, cb) => {
-        expect(query).toContain('SELECT id, meta FROM errsole_logs_v1 WHERE id = ?');
+        expect(query).toContain('SELECT id, meta FROM errsole_logs_v2 WHERE id = ?');
         expect(values).toEqual([1]);
         cb(new Error('Query error'));
       });
@@ -855,7 +855,7 @@ describe('ErrsoleMySQL', () => {
 
       expect(getConfigSpy).toHaveBeenCalledWith('logsTTL');
       expect(poolQuerySpy).toHaveBeenCalledWith(
-        'DELETE FROM errsole_logs_v1 WHERE timestamp < ? LIMIT 1000',
+        'DELETE FROM errsole_logs_v2 WHERE timestamp < ? LIMIT 1000',
         [expect.any(String)],
         expect.any(Function)
       );
@@ -882,7 +882,7 @@ describe('ErrsoleMySQL', () => {
 
       expect(getConfigSpy).toHaveBeenCalledWith('logsTTL');
       expect(poolQuerySpy).toHaveBeenCalledWith(
-        'DELETE FROM errsole_logs_v1 WHERE timestamp < ? LIMIT 1000',
+        'DELETE FROM errsole_logs_v2 WHERE timestamp < ? LIMIT 1000',
         [expect.any(String)],
         expect.any(Function)
       );
@@ -899,7 +899,7 @@ describe('ErrsoleMySQL', () => {
 
       expect(getConfigSpy).toHaveBeenCalledWith('logsTTL');
       expect(poolQuerySpy).toHaveBeenCalledWith(
-        'DELETE FROM errsole_logs_v1 WHERE timestamp < ? LIMIT 1000',
+        'DELETE FROM errsole_logs_v2 WHERE timestamp < ? LIMIT 1000',
         [expect.any(String)],
         expect.any(Function)
       );
