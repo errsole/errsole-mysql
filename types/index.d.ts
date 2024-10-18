@@ -41,6 +41,15 @@ declare module 'errsole-mysql' {
     role: string;
   }
 
+  interface Notification {
+    id?: number;
+    errsole_id: number;
+    hostname: string;
+    hashed_message: string;
+    created_at?: Date;
+    updated_at?: Date;
+  }
+
   class ErrsoleMySQL {
     constructor(options: PoolOptions);
 
@@ -62,6 +71,9 @@ declare module 'errsole-mysql' {
     updateUserByEmail(email: string, updates: Partial<User>): Promise<{ item: User }>;
     updatePassword(email: string, currentPassword: string, newPassword: string): Promise<{ item: User }>;
     deleteUser(userId: number): Promise<{}>;
+    insertNotificationItem(notification: Notification): Promise<{ previousNotificationItem: Notification | null, todayNotificationCount: number }>;
+
+
   }
 
   export default ErrsoleMySQL;
