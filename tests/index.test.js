@@ -1266,23 +1266,6 @@ describe('ErrsoleMySQL', () => {
       });
     });
 
-    // it('should handle errors during transaction start', async () => {
-    //   // Mock error in beginning transaction
-    //   connectionMock.beginTransaction.mockImplementationOnce((cb) => cb(new Error('Transaction start error')));
-
-    //   const notification = {
-    //     errsole_id: 123,
-    //     hostname: 'localhost',
-    //     hashed_message: 'abcd1234'
-    //   };
-
-    //   await expect(errsoleMySQL.insertNotificationItem(notification)).rejects.toThrow('Transaction start error');
-
-    //   expect(connectionMock.beginTransaction).toHaveBeenCalled();
-    //   expect(connectionMock.rollback).not.toHaveBeenCalled(); // No need to rollback if transaction didn't start
-    //   expect(connectionMock.release).toHaveBeenCalled();
-    // });
-
     it('should handle errors during transaction start', async () => {
       // Mock error in beginning transaction
       connectionMock.beginTransaction.mockImplementationOnce((cb) => cb(new Error('Transaction start error')));
@@ -1487,6 +1470,230 @@ describe('ErrsoleMySQL', () => {
       expect(connectionMock.commit).toHaveBeenCalled();
       expect(connectionMock.rollback).toHaveBeenCalled();
       expect(connectionMock.release).toHaveBeenCalled();
+    });
+  });
+
+  describe('#deleteExpiredNotificationItems', () => {
+    let getConfigSpy;
+    let poolQuerySpy;
+    let setTimeoutSpy;
+    let consoleErrorSpy;
+
+    beforeEach(() => {
+      // Spy on getConfig method and mock its implementation
+      getConfigSpy = jest.spyOn(errsoleMySQL, 'getConfig').mockResolvedValue({ item: null });
+
+      // Spy on pool.query method with specific implementations
+      poolQuerySpy = jest.spyOn(poolMock, 'query').mockImplementation((query, values, cb) => {
+        if (typeof values === 'function') {
+          cb = values;
+          values = null;
+        }
+
+        if (query.includes('DELETE FROM errsole_notifications')) {
+          // Default behavior: delete 0 rows
+          cb(null, { affectedRows: 0 });
+        } else {
+          // Handle any other queries if necessary
+          cb(null, []);
+        }
+      });
+
+      // Mock setTimeout to immediately invoke the callback
+      setTimeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation((cb) => cb());
+
+      // Spy on console.error
+      consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Ensure the running flag is false before each test
+      errsoleMySQL.deleteExpiredNotificationItemsRunning = false;
+
+      // Clear any previous calls to poolQuerySpy to isolate tests
+      poolQuerySpy.mockClear();
+    });
+
+    afterEach(() => {
+      jest.clearAllMocks();
+      jest.useRealTimers();
+    });
+
+    it('should not run if deleteExpiredNotificationItems is already running', async () => {
+      // Set the running flag to true to simulate concurrent execution
+      errsoleMySQL.deleteExpiredNotificationItemsRunning = true;
+
+      await errsoleMySQL.deleteExpiredNotificationItems();
+
+      // Expect that deleteExpiredNotificationItems does not perform any deletion
+      expect(getConfigSpy).not.toHaveBeenCalled();
+      expect(poolQuerySpy).not.toHaveBeenCalled();
+    });
+
+    it('should set deleteExpiredNotificationItemsRunning to true during execution and reset after', async () => {
+      // Mock getConfig to return null (use default TTL)
+      getConfigSpy.mockResolvedValue({ item: null });
+
+      // Mock pool.query to delete 0 rows, so the loop exits after one iteration
+      poolQuerySpy.mockImplementationOnce((query, values, cb) => {
+        // Validate the SQL query and parameters
+        const expectedSQL = 'DELETE FROM errsole_notifications WHERE created_at < ? LIMIT 1000';
+        expect(query).toBe(expectedSQL);
+
+        // Calculate expected expirationTime based on default TTL (30 days)
+        const expectedExpirationTime = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000))
+          .toISOString().slice(0, 19).replace('T', ' ');
+
+        expect(values).toContain(expectedExpirationTime);
+
+        cb(null, { affectedRows: 0 });
+      });
+
+      await errsoleMySQL.deleteExpiredNotificationItems();
+
+      // Expect the running flag to be reset
+      expect(errsoleMySQL.deleteExpiredNotificationItemsRunning).toBe(false);
+
+      // Ensure getConfig was called once
+      expect(getConfigSpy).toHaveBeenCalledTimes(1);
+      expect(getConfigSpy).toHaveBeenCalledWith('logsTTL');
+
+      // Ensure pool.query was called once
+      expect(poolQuerySpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should use default TTL if config is not found', async () => {
+      // Mock getConfig to return null (use default TTL)
+      getConfigSpy.mockResolvedValue({ item: null });
+
+      // Mock pool.query to delete 0 rows
+      poolQuerySpy.mockImplementationOnce((query, values, cb) => {
+        const [expirationTime] = values;
+
+        // Calculate expected expirationTime based on default TTL (30 days)
+        const expectedExpirationTime = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000))
+          .toISOString().slice(0, 19).replace('T', ' ');
+
+        expect(expirationTime).toBe(expectedExpirationTime);
+
+        cb(null, { affectedRows: 0 });
+      });
+
+      await errsoleMySQL.deleteExpiredNotificationItems();
+
+      // Ensure pool.query was called once
+      expect(poolQuerySpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should use configured TTL if config is present and valid', async () => {
+      const customTTL = 15 * 24 * 60 * 60 * 1000; // 15 days in milliseconds
+      getConfigSpy.mockResolvedValue({ item: { value: customTTL.toString() } });
+
+      // Mock pool.query to delete 0 rows
+      poolQuerySpy.mockImplementationOnce((query, values, cb) => {
+        const [expirationTime] = values;
+
+        // Calculate expected expirationTime based on custom TTL (15 days)
+        const expectedExpirationTime = new Date(Date.now() - customTTL)
+          .toISOString().slice(0, 19).replace('T', ' ');
+
+        expect(expirationTime).toBe(expectedExpirationTime);
+
+        cb(null, { affectedRows: 0 });
+      });
+
+      await errsoleMySQL.deleteExpiredNotificationItems();
+
+      // Ensure pool.query was called once
+      expect(poolQuerySpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should use default TTL if configured TTL is invalid', async () => {
+      getConfigSpy.mockResolvedValue({ item: { value: 'invalid' } }); // Invalid TTL
+
+      // Mock pool.query to delete 0 rows
+      poolQuerySpy.mockImplementationOnce((query, values, cb) => {
+        const [expirationTime] = values;
+
+        // Calculate expected expirationTime based on default TTL (30 days)
+        const expectedExpirationTime = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000))
+          .toISOString().slice(0, 19).replace('T', ' ');
+
+        expect(expirationTime).toBe(expectedExpirationTime);
+
+        cb(null, { affectedRows: 0 });
+      });
+
+      await errsoleMySQL.deleteExpiredNotificationItems();
+
+      // Ensure pool.query was called once
+      expect(poolQuerySpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should delete expired notifications in batches until none are left', async () => {
+      getConfigSpy.mockResolvedValue({ item: null }); // Use default TTL
+
+      // Simulate two deletion batches: first deletes 1000 rows, second deletes 0 rows
+      poolQuerySpy
+        .mockImplementationOnce((query, values, cb) => {
+          cb(null, { affectedRows: 1000 });
+        })
+        .mockImplementationOnce((query, values, cb) => {
+          cb(null, { affectedRows: 0 });
+        });
+
+      await errsoleMySQL.deleteExpiredNotificationItems();
+
+      // Ensure pool.query was called twice
+      expect(poolQuerySpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle query errors gracefully', async () => {
+      getConfigSpy.mockResolvedValue({ item: null }); // Use default TTL
+
+      // Simulate first deletion batch deleting 1000 rows, second batch failing
+      poolQuerySpy
+        .mockImplementationOnce((query, values, cb) => {
+          cb(null, { affectedRows: 1000 });
+        })
+        .mockImplementationOnce((query, values, cb) => {
+          cb(new Error('Delete error'));
+        });
+
+      await errsoleMySQL.deleteExpiredNotificationItems();
+
+      // Ensure pool.query was called twice
+      expect(poolQuerySpy).toHaveBeenCalledTimes(2);
+
+      // Ensure console.error was called with the error
+      expect(consoleErrorSpy).toHaveBeenCalledWith(new Error('Delete error'));
+    });
+
+    it('should reset deleteExpiredNotificationItemsRunning flag after successful execution', async () => {
+      getConfigSpy.mockResolvedValue({ item: null }); // Use default TTL
+
+      // Mock pool.query to delete 0 rows
+      poolQuerySpy.mockImplementationOnce((query, values, cb) => {
+        cb(null, { affectedRows: 0 });
+      });
+
+      await errsoleMySQL.deleteExpiredNotificationItems();
+
+      // Ensure the running flag is reset
+      expect(errsoleMySQL.deleteExpiredNotificationItemsRunning).toBe(false);
+    });
+
+    it('should reset deleteExpiredNotificationItemsRunning flag after execution with errors', async () => {
+      getConfigSpy.mockResolvedValue({ item: null }); // Use default TTL
+
+      // Simulate a query error
+      poolQuerySpy.mockImplementationOnce((query, values, cb) => cb(new Error('Delete error')));
+
+      await errsoleMySQL.deleteExpiredNotificationItems();
+
+      // Ensure the running flag is reset
+      expect(errsoleMySQL.deleteExpiredNotificationItemsRunning).toBe(false);
+
+      // Ensure console.error was called with the error
+      expect(consoleErrorSpy).toHaveBeenCalledWith(new Error('Delete error'));
     });
   });
 
