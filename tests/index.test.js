@@ -1083,6 +1083,413 @@ describe('ErrsoleMySQL', () => {
     });
   });
 
+  describe('#insertNotificationItem', () => {
+    beforeEach(() => {
+      // Mock the connection object for transactions
+      connectionMock = {
+        beginTransaction: jest.fn((cb) => cb(null)),
+        query: jest.fn(),
+        commit: jest.fn((cb) => cb(null)),
+        rollback: jest.fn((cb) => cb(null)),
+        release: jest.fn()
+      };
+
+      // Update poolMock to return the new connectionMock
+      poolMock.getConnection.mockImplementation((cb) => cb(null, connectionMock));
+    });
+
+    it('should insert a notification when no previous notification exists', async () => {
+      // Mock fetching previous notification (none exists)
+      connectionMock.query
+        .mockImplementationOnce((query, values, cb) => cb(null, [])) // Fetch previous notification
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 })) // Insert notification
+        .mockImplementationOnce((query, values, cb) => cb(null, [{ notificationCount: 1 }])); // Count today's notifications
+
+      const notification = {
+        errsole_id: 123,
+        hostname: 'localhost',
+        hashed_message: 'abcd1234'
+      };
+
+      const result = await errsoleMySQL.insertNotificationItem(notification);
+
+      expect(connectionMock.beginTransaction).toHaveBeenCalled();
+
+      // Check fetching previous notification
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('SELECT * FROM errsole_notifications'),
+        [notification.hostname, notification.hashed_message],
+        expect.any(Function)
+      );
+
+      // Check inserting new notification
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('INSERT INTO errsole_notifications'),
+        [notification.hostname, notification.errsole_id, notification.hashed_message],
+        expect.any(Function)
+      );
+
+      // Check counting today's notifications
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        3,
+        expect.stringContaining('SELECT COUNT(*) AS notificationCount'),
+        [notification.hashed_message, expect.any(Date), expect.any(Date)],
+        expect.any(Function)
+      );
+
+      expect(connectionMock.commit).toHaveBeenCalled();
+      expect(connectionMock.release).toHaveBeenCalled();
+
+      expect(result).toEqual({
+        previousNotificationItem: null,
+        todayNotificationCount: 1
+      });
+    });
+
+    it('should insert a notification when a previous notification exists on the same day', async () => {
+      const previousNotification = {
+        id: 1,
+        errsole_id: 123,
+        hostname: 'localhost',
+        hashed_message: 'abcd1234',
+        created_at: new Date(),
+        updated_at: new Date()
+      };
+
+      // Mock fetching previous notification
+      connectionMock.query
+        .mockImplementationOnce((query, values, cb) => cb(null, [previousNotification])) // Fetch previous notification
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 })) // Insert notification
+        .mockImplementationOnce((query, values, cb) => cb(null, [{ notificationCount: 2 }])); // Count today's notifications
+
+      const notification = {
+        errsole_id: 123,
+        hostname: 'localhost',
+        hashed_message: 'abcd1234'
+      };
+
+      const result = await errsoleMySQL.insertNotificationItem(notification);
+
+      expect(connectionMock.beginTransaction).toHaveBeenCalled();
+
+      // Check fetching previous notification
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('SELECT * FROM errsole_notifications'),
+        [notification.hostname, notification.hashed_message],
+        expect.any(Function)
+      );
+
+      // Check inserting new notification
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('INSERT INTO errsole_notifications'),
+        [notification.hostname, notification.errsole_id, notification.hashed_message],
+        expect.any(Function)
+      );
+
+      // Check counting today's notifications
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        3,
+        expect.stringContaining('SELECT COUNT(*) AS notificationCount'),
+        [notification.hashed_message, expect.any(Date), expect.any(Date)],
+        expect.any(Function)
+      );
+
+      expect(connectionMock.commit).toHaveBeenCalled();
+      expect(connectionMock.release).toHaveBeenCalled();
+
+      expect(result).toEqual({
+        previousNotificationItem: previousNotification,
+        todayNotificationCount: 2
+      });
+    });
+
+    it('should insert a notification when a previous notification exists on a different day', async () => {
+      const previousNotification = {
+        id: 1,
+        errsole_id: 123,
+        hostname: 'localhost',
+        hashed_message: 'abcd1234',
+        created_at: new Date('2024-10-17T10:44:44Z'),
+        updated_at: new Date('2024-10-17T10:44:44Z')
+      };
+
+      // Mock fetching previous notification
+      connectionMock.query
+        .mockImplementationOnce((query, values, cb) => cb(null, [previousNotification])) // Fetch previous notification
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 })) // Insert notification
+        .mockImplementationOnce((query, values, cb) => cb(null, [{ notificationCount: 1 }])); // Count today's notifications
+
+      const notification = {
+        errsole_id: 123,
+        hostname: 'localhost',
+        hashed_message: 'abcd1234'
+      };
+
+      const result = await errsoleMySQL.insertNotificationItem(notification);
+
+      expect(connectionMock.beginTransaction).toHaveBeenCalled();
+
+      // Check fetching previous notification
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('SELECT * FROM errsole_notifications'),
+        [notification.hostname, notification.hashed_message],
+        expect.any(Function)
+      );
+
+      // Check inserting new notification
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('INSERT INTO errsole_notifications'),
+        [notification.hostname, notification.errsole_id, notification.hashed_message],
+        expect.any(Function)
+      );
+
+      // Check counting today's notifications
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        3,
+        expect.stringContaining('SELECT COUNT(*) AS notificationCount'),
+        [notification.hashed_message, expect.any(Date), expect.any(Date)],
+        expect.any(Function)
+      );
+
+      expect(connectionMock.commit).toHaveBeenCalled();
+      expect(connectionMock.release).toHaveBeenCalled();
+
+      expect(result).toEqual({
+        previousNotificationItem: previousNotification,
+        todayNotificationCount: 1
+      });
+    });
+
+    // it('should handle errors during transaction start', async () => {
+    //   // Mock error in beginning transaction
+    //   connectionMock.beginTransaction.mockImplementationOnce((cb) => cb(new Error('Transaction start error')));
+
+    //   const notification = {
+    //     errsole_id: 123,
+    //     hostname: 'localhost',
+    //     hashed_message: 'abcd1234'
+    //   };
+
+    //   await expect(errsoleMySQL.insertNotificationItem(notification)).rejects.toThrow('Transaction start error');
+
+    //   expect(connectionMock.beginTransaction).toHaveBeenCalled();
+    //   expect(connectionMock.rollback).not.toHaveBeenCalled(); // No need to rollback if transaction didn't start
+    //   expect(connectionMock.release).toHaveBeenCalled();
+    // });
+
+    it('should handle errors during transaction start', async () => {
+      // Mock error in beginning transaction
+      connectionMock.beginTransaction.mockImplementationOnce((cb) => cb(new Error('Transaction start error')));
+
+      const notification = {
+        errsole_id: 123,
+        hostname: 'localhost',
+        hashed_message: 'abcd1234'
+      };
+
+      await expect(errsoleMySQL.insertNotificationItem(notification)).rejects.toThrow('Transaction start error');
+
+      expect(connectionMock.beginTransaction).toHaveBeenCalled();
+      expect(connectionMock.rollback).toHaveBeenCalled(); // Adjusted expectation
+      expect(connectionMock.release).toHaveBeenCalled();
+    });
+
+    it('should handle errors while fetching previous notification', async () => {
+      // Mock error in fetching previous notification
+      connectionMock.query
+        .mockImplementationOnce((query, values, cb) => cb(new Error('Fetch error')));
+
+      const notification = {
+        errsole_id: 123,
+        hostname: 'localhost',
+        hashed_message: 'abcd1234'
+      };
+
+      await expect(errsoleMySQL.insertNotificationItem(notification)).rejects.toThrow('Fetch error');
+
+      expect(connectionMock.beginTransaction).toHaveBeenCalled();
+
+      // Check fetching previous notification
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('SELECT * FROM errsole_notifications'),
+        [notification.hostname, notification.hashed_message],
+        expect.any(Function)
+      );
+
+      // Ensure rollback and release are called
+      expect(connectionMock.rollback).toHaveBeenCalled();
+      expect(connectionMock.release).toHaveBeenCalled();
+    });
+
+    it('should handle errors during notification insertion', async () => {
+      // Mock fetching previous notification successfully
+      connectionMock.query
+        .mockImplementationOnce((query, values, cb) => cb(null, [])) // Fetch previous notification
+        .mockImplementationOnce((query, values, cb) => cb(new Error('Insert error'))); // Insert notification
+
+      const notification = {
+        errsole_id: 123,
+        hostname: 'localhost',
+        hashed_message: 'abcd1234'
+      };
+
+      await expect(errsoleMySQL.insertNotificationItem(notification)).rejects.toThrow('Insert error');
+
+      expect(connectionMock.beginTransaction).toHaveBeenCalled();
+
+      // Check fetching previous notification
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('SELECT * FROM errsole_notifications'),
+        [notification.hostname, notification.hashed_message],
+        expect.any(Function)
+      );
+
+      // Check inserting new notification
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('INSERT INTO errsole_notifications'),
+        [notification.hostname, notification.errsole_id, notification.hashed_message],
+        expect.any(Function)
+      );
+
+      // Ensure rollback and release are called
+      expect(connectionMock.rollback).toHaveBeenCalled();
+      expect(connectionMock.release).toHaveBeenCalled();
+    });
+
+    it('should handle errors while counting today\'s notifications', async () => {
+      // Mock fetching previous notification and inserting successfully
+      connectionMock.query
+        .mockImplementationOnce((query, values, cb) => cb(null, [])) // Fetch previous notification
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 })) // Insert notification
+        .mockImplementationOnce((query, values, cb) => cb(new Error('Count error'))); // Count today's notifications
+
+      const notification = {
+        errsole_id: 123,
+        hostname: 'localhost',
+        hashed_message: 'abcd1234'
+      };
+
+      await expect(errsoleMySQL.insertNotificationItem(notification)).rejects.toThrow('Count error');
+
+      expect(connectionMock.beginTransaction).toHaveBeenCalled();
+
+      // Check fetching previous notification
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('SELECT * FROM errsole_notifications'),
+        [notification.hostname, notification.hashed_message],
+        expect.any(Function)
+      );
+
+      // Check inserting new notification
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('INSERT INTO errsole_notifications'),
+        [notification.hostname, notification.errsole_id, notification.hashed_message],
+        expect.any(Function)
+      );
+
+      // Check counting today's notifications
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        3,
+        expect.stringContaining('SELECT COUNT(*) AS notificationCount'),
+        [notification.hashed_message, expect.any(Date), expect.any(Date)],
+        expect.any(Function)
+      );
+
+      // Ensure rollback and release are called
+      expect(connectionMock.rollback).toHaveBeenCalled();
+      expect(connectionMock.release).toHaveBeenCalled();
+    });
+
+    it('should handle errors during transaction commit', async () => {
+      // Mock fetching previous notification and inserting successfully
+      connectionMock.query
+        .mockImplementationOnce((query, values, cb) => cb(null, [])) // Fetch previous notification
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 })) // Insert notification
+        .mockImplementationOnce((query, values, cb) => cb(null, [{ notificationCount: 1 }])); // Count today's notifications
+
+      // Mock commit error
+      connectionMock.commit.mockImplementationOnce((cb) => cb(new Error('Commit error')));
+
+      const notification = {
+        errsole_id: 123,
+        hostname: 'localhost',
+        hashed_message: 'abcd1234'
+      };
+
+      await expect(errsoleMySQL.insertNotificationItem(notification)).rejects.toThrow('Commit error');
+
+      expect(connectionMock.beginTransaction).toHaveBeenCalled();
+
+      // Check fetching previous notification
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('SELECT * FROM errsole_notifications'),
+        [notification.hostname, notification.hashed_message],
+        expect.any(Function)
+      );
+
+      // Check inserting new notification
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('INSERT INTO errsole_notifications'),
+        [notification.hostname, notification.errsole_id, notification.hashed_message],
+        expect.any(Function)
+      );
+
+      // Check counting today's notifications
+      expect(connectionMock.query).toHaveBeenNthCalledWith(
+        3,
+        expect.stringContaining('SELECT COUNT(*) AS notificationCount'),
+        [notification.hashed_message, expect.any(Date), expect.any(Date)],
+        expect.any(Function)
+      );
+
+      // Ensure commit was called
+      expect(connectionMock.commit).toHaveBeenCalled();
+
+      // Ensure rollback was called due to commit error
+      expect(connectionMock.rollback).toHaveBeenCalled();
+
+      expect(connectionMock.release).toHaveBeenCalled();
+    });
+
+    it('should rollback the transaction if any step fails', async () => {
+      // Mock fetching previous notification and inserting successfully
+      connectionMock.query
+        .mockImplementationOnce((query, values, cb) => cb(null, [])) // Fetch previous notification
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 })) // Insert notification
+        .mockImplementationOnce((query, values, cb) => cb(null, [{ notificationCount: 1 }])); // Count today's notifications
+
+      // Mock commit failure
+      connectionMock.commit.mockImplementationOnce((cb) => cb(new Error('Commit failed')));
+
+      const notification = {
+        errsole_id: 123,
+        hostname: 'localhost',
+        hashed_message: 'abcd1234'
+      };
+
+      await expect(errsoleMySQL.insertNotificationItem(notification)).rejects.toThrow('Commit failed');
+
+      expect(connectionMock.beginTransaction).toHaveBeenCalled();
+      expect(connectionMock.query).toHaveBeenCalledTimes(3);
+      expect(connectionMock.commit).toHaveBeenCalled();
+      expect(connectionMock.rollback).toHaveBeenCalled();
+      expect(connectionMock.release).toHaveBeenCalled();
+    });
+  });
+
   afterAll(() => {
     // Ensure to clear any remaining intervals and cron jobs
     if (errsoleMySQL.flushIntervalId) {
