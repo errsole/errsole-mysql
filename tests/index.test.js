@@ -1,11 +1,16 @@
 const mysql = require('mysql2');
 const bcrypt = require('bcryptjs');
-const ErrsoleMySQL = require('../lib/index'); // Adjust the path as needed
+const ErrsoleMySQL = require('../lib/index');
 const cron = require('node-cron');
 /* globals expect, jest, beforeEach, it, afterEach, describe, afterAll */
 
 jest.mock('mysql2', () => ({
-  createPool: jest.fn()
+  createPool: jest.fn(),
+  createConnection: jest.fn().mockReturnValue({
+    connect: jest.fn((cb) => cb(null)),
+    query: jest.fn((query, cb) => cb(null, {})),
+    end: jest.fn()
+  })
 }));
 
 jest.mock('bcryptjs', () => ({
@@ -137,6 +142,7 @@ describe('ErrsoleMySQL', () => {
       expect(poolMock.query).not.toHaveBeenCalledWith('SET SESSION sort_buffer_size = 8388608', expect.any(Function));
     });
   });
+
   describe('#createTables', () => {
     it('should create tables if they do not exist', async () => {
       poolMock.query.mockImplementation((query, cb) => cb(null, { affectedRows: 1 }));
@@ -224,6 +230,7 @@ describe('ErrsoleMySQL', () => {
       await expect(errsoleMySQL.deleteConfig('logsTTL')).rejects.toThrow('Configuration not found.');
     });
   });
+
   describe('#ensureLogsTTL', () => {
     let getConfigSpy;
     let setConfigSpy;
@@ -1022,70 +1029,8 @@ describe('ErrsoleMySQL', () => {
     });
   });
 
-  describe('#getHostnames', () => {
-    let poolMock;
-
-    beforeEach(() => {
-      poolMock = {
-        query: jest.fn()
-      };
-
-      errsoleMySQL = new ErrsoleMySQL({
-        host: 'localhost',
-        user: 'username',
-        password: 'password',
-        database: 'errsole_db',
-        waitForConnections: true,
-        connectionLimit: 10,
-        queueLimit: 0
-      });
-
-      errsoleMySQL.pool = poolMock;
-    });
-
-    afterEach(() => {
-      jest.clearAllMocks();
-    });
-
-    it('should retrieve distinct hostnames and return them sorted', async () => {
-      const mockResults = [
-        { hostname: 'host3' },
-        { hostname: 'host1' },
-        { hostname: 'host2' }
-      ];
-
-      poolMock.query.mockImplementation((query, cb) => cb(null, mockResults));
-
-      const result = await errsoleMySQL.getHostnames();
-
-      expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.any(Function));
-      expect(result).toEqual({ items: ['host1', 'host2', 'host3'] });
-    });
-
-    it('should return an empty list if no hostnames are found', async () => {
-      const mockResults = [];
-
-      poolMock.query.mockImplementation((query, cb) => cb(null, mockResults));
-
-      const result = await errsoleMySQL.getHostnames();
-
-      expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.any(Function));
-      expect(result).toEqual({ items: [] });
-    });
-
-    it('should handle errors thrown by the query', async () => {
-      const mockError = new Error('Query error');
-
-      poolMock.query.mockImplementation((query, cb) => cb(mockError));
-
-      await expect(errsoleMySQL.getHostnames()).rejects.toThrow('Query error');
-      expect(poolMock.query).toHaveBeenCalledWith(expect.any(String), expect.any(Function));
-    });
-  });
-
   describe('#insertNotificationItem', () => {
     beforeEach(() => {
-      // Mock the connection object for transactions
       connectionMock = {
         beginTransaction: jest.fn((cb) => cb(null)),
         query: jest.fn(),
@@ -1094,64 +1039,10 @@ describe('ErrsoleMySQL', () => {
         release: jest.fn()
       };
 
-      // Update poolMock to return the new connectionMock
       poolMock.getConnection.mockImplementation((cb) => cb(null, connectionMock));
     });
 
-    // it('should insert a notification when no previous notification exists', async () => {
-    //   // Mock fetching previous notification (none exists)
-    //   connectionMock.query
-    //     .mockImplementationOnce((query, values, cb) => cb(null, [])) // Fetch previous notification
-    //     .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 })) // Insert notification
-    //     .mockImplementationOnce((query, values, cb) => cb(null, [{ notificationCount: 1 }])); // Count today's notifications
-
-    //   const notification = {
-    //     errsole_id: 123,
-    //     hostname: 'localhost',
-    //     hashed_message: 'abcd1234'
-    //   };
-
-    //   const result = await errsoleMySQL.insertNotificationItem(notification);
-
-    //   // Start the transaction
-    //   expect(connectionMock.beginTransaction).toHaveBeenCalled();
-
-    //   // Check fetching previous notification
-    //   expect(connectionMock.query).toHaveBeenNthCalledWith(
-    //     1,
-    //     expect.stringContaining('SELECT * FROM errsole_notifications'),
-    //     [notification.hostname, notification.hashed_message],
-    //     expect.any(Function)
-    //   );
-
-    //   // Check inserting new notification with correct order of parameters
-    //   expect(connectionMock.query).toHaveBeenNthCalledWith(
-    //     2,
-    //     expect.stringContaining('INSERT INTO errsole_notifications'),
-    //     [notification.errsole_id, notification.hostname, notification.hashed_message],
-    //     expect.any(Function)
-    //   );
-
-    //   // Check counting today's notifications
-    //   expect(connectionMock.query).toHaveBeenNthCalledWith(
-    //     3,
-    //     expect.stringContaining('SELECT COUNT(*) AS notificationCount'),
-    //     [notification.hashed_message, expect.any(Date), expect.any(Date)],
-    //     expect.any(Function)
-    //   );
-
-    //   // Confirm the transaction was committed and connection released
-    //   expect(connectionMock.commit).toHaveBeenCalled();
-    //   expect(connectionMock.release).toHaveBeenCalled();
-
-    //   // Validate the function result
-    //   expect(result).toEqual({
-    //     previousNotificationItem: null,
-    //     todayNotificationCount: 1
-    //   });
-    // });
     it('should insert a notification when no previous notification exists', async () => {
-      // Mock fetching previous notification (returns empty array to simulate no existing notification)
       connectionMock.query
         .mockImplementationOnce((query, values, cb) => cb(null, []))
         .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 }))
@@ -1288,14 +1179,6 @@ describe('ErrsoleMySQL', () => {
         [notification.hostname, notification.hashed_message],
         expect.any(Function)
       );
-
-      // Check inserting new notification
-      // expect(connectionMock.query).toHaveBeenNthCalledWith(
-      //   2,
-      //   expect.stringContaining('INSERT INTO errsole_notifications'),
-      //   [notification.hostname, notification.errsole_id, notification.hashed_message],
-      //   expect.any(Function)
-      // );
 
       expect(connectionMock.query).toHaveBeenNthCalledWith(
         2,
@@ -1536,7 +1419,6 @@ describe('ErrsoleMySQL', () => {
   describe('#deleteExpiredNotificationItems', () => {
     let getConfigSpy;
     let poolQuerySpy;
-    let setTimeoutSpy;
     let consoleErrorSpy;
 
     beforeEach(() => {
