@@ -943,6 +943,73 @@ describe('ErrsoleMySQL', () => {
     });
   });
 
+  describe('#getHostnames', () => {
+    let errsoleMySQL;
+    let poolMock;
+
+    beforeEach(() => {
+      poolMock = mysql.createPool();
+      errsoleMySQL = new ErrsoleMySQL({
+        host: 'localhost',
+        user: 'test_user',
+        password: 'test_password',
+        database: 'test_db'
+      });
+      errsoleMySQL.pool = poolMock;
+    });
+
+    afterEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should retrieve distinct non-empty hostnames from the database', async () => {
+      poolMock.query.mockImplementation((query, callback) => {
+        // Mock the query response
+        callback(null, [
+          { hostname: 'host1' },
+          { hostname: 'host2' },
+          { hostname: 'host3' }
+        ]);
+      });
+
+      const result = await errsoleMySQL.getHostnames();
+
+      expect(poolMock.query).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT DISTINCT hostname'),
+        expect.any(Function)
+      );
+      expect(result).toEqual({ items: ['host1', 'host2', 'host3'] });
+    });
+
+    it('should return an empty array if no hostnames are found', async () => {
+      poolMock.query.mockImplementation((query, callback) => {
+        // Mock the query response
+        callback(null, []);
+      });
+
+      const result = await errsoleMySQL.getHostnames();
+
+      expect(poolMock.query).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT DISTINCT hostname'),
+        expect.any(Function)
+      );
+      expect(result).toEqual({ items: [] });
+    });
+
+    it('should handle database query errors gracefully', async () => {
+      poolMock.query.mockImplementation((query, callback) => {
+        // Simulate a query error
+        callback(new Error('Query error'));
+      });
+
+      await expect(errsoleMySQL.getHostnames()).rejects.toThrow('Query error');
+      expect(poolMock.query).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT DISTINCT hostname'),
+        expect.any(Function)
+      );
+    });
+  });
+
   describe('#deleteExpiredLogs', () => {
     let getConfigSpy;
     let poolQuerySpy;
@@ -1419,6 +1486,7 @@ describe('ErrsoleMySQL', () => {
   describe('#deleteExpiredNotificationItems', () => {
     let getConfigSpy;
     let poolQuerySpy;
+    let setTimeoutSpy;
     let consoleErrorSpy;
 
     beforeEach(() => {
