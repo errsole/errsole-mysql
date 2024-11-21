@@ -24,7 +24,6 @@ describe('ErrsoleMySQL', () => {
   let connectionMock;
   let originalConsoleError;
   let cronJob;
-  const TABLE_PREFIX = 'testprefix';
 
   beforeEach(() => {
     connectionMock = {
@@ -45,9 +44,7 @@ describe('ErrsoleMySQL', () => {
       database: 'errsole_db',
       waitForConnections: true,
       connectionLimit: 10,
-      queueLimit: 0,
-      tablePrefix: TABLE_PREFIX
-
+      queueLimit: 0
     });
 
     // Mock setInterval and cron.schedule
@@ -148,37 +145,13 @@ describe('ErrsoleMySQL', () => {
 
   describe('#createTables', () => {
     it('should create tables if they do not exist', async () => {
-      const tablePrefix = errsoleMySQL.tablePrefix || ''; // Use tablePrefix directly
-      const expectedLogsTable = `CREATE TABLE IF NOT EXISTS \`${tablePrefix}_logs_v2\``;
-      const expectedUsersTable = `CREATE TABLE IF NOT EXISTS \`${tablePrefix}_users\``;
-      const expectedConfigTable = `CREATE TABLE IF NOT EXISTS \`${tablePrefix}_config\``;
-
-      poolMock.query.mockImplementation((query, cb) => {
-        if (query.includes('CREATE TABLE')) {
-          cb(null, { affectedRows: 1 });
-        } else {
-          cb(new Error('Unexpected query'));
-        }
-      });
+      poolMock.query.mockImplementation((query, cb) => cb(null, { affectedRows: 1 }));
 
       await errsoleMySQL.createTables();
 
-      // Assert the second, third, and fourth calls correspond to table creation
-      expect(poolMock.query).toHaveBeenNthCalledWith(
-        2,
-        expect.stringContaining(expectedLogsTable),
-        expect.any(Function)
-      );
-      expect(poolMock.query).toHaveBeenNthCalledWith(
-        3,
-        expect.stringContaining(expectedUsersTable),
-        expect.any(Function)
-      );
-      expect(poolMock.query).toHaveBeenNthCalledWith(
-        4,
-        expect.stringContaining(expectedConfigTable),
-        expect.any(Function)
-      );
+      expect(poolMock.query).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS `errsole_logs_v2`'), expect.any(Function));
+      expect(poolMock.query).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS `errsole_users`'), expect.any(Function));
+      expect(poolMock.query).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS `errsole_config`'), expect.any(Function));
     });
 
     it('should handle errors in table creation', async () => {
@@ -190,105 +163,71 @@ describe('ErrsoleMySQL', () => {
 
   describe('#getConfig', () => {
     it('should retrieve a configuration based on the provided key', async () => {
-      const configTable = `${errsoleMySQL.tablePrefix}_config`;
-
       poolMock.query.mockImplementation((query, values, cb) => cb(null, [{ key: 'testKey', value: 'testValue' }]));
 
       const config = await errsoleMySQL.getConfig('testKey');
 
       expect(config).toEqual({ item: { key: 'testKey', value: 'testValue' } });
-      expect(poolMock.query).toHaveBeenCalledWith(
-        `SELECT * FROM \`${configTable}\` WHERE \`key\` = ?`,
-        ['testKey'],
-        expect.any(Function)
-      );
+      expect(poolMock.query).toHaveBeenCalledWith('SELECT * FROM errsole_config WHERE `key` = ?', ['testKey'], expect.any(Function));
     });
 
     it('should handle errors during the query execution', async () => {
-      const configTable = `${errsoleMySQL.tablePrefix}_config`;
-
       poolMock.query.mockImplementation((query, values, cb) => cb(new Error('Query error')));
 
       await expect(errsoleMySQL.getConfig('testKey')).rejects.toThrow('Query error');
-      expect(poolMock.query).toHaveBeenCalledWith(
-        `SELECT * FROM \`${configTable}\` WHERE \`key\` = ?`,
-        ['testKey'],
-        expect.any(Function)
-      );
+      expect(poolMock.query).toHaveBeenCalledWith('SELECT * FROM errsole_config WHERE `key` = ?', ['testKey'], expect.any(Function));
     });
   });
 
   describe('#setConfig', () => {
     it('should update an existing configuration', async () => {
-      const configTable = `${errsoleMySQL.tablePrefix}_config`;
-
-      // Mock successful insertion/update
       poolMock.query.mockImplementation((query, values, cb) => cb(null, { affectedRows: 1 }));
-
-      // Mock getConfig to return an existing configuration
       jest.spyOn(errsoleMySQL, 'getConfig').mockResolvedValue({ item: { key: 'logsTTL', value: '2592000000' } });
 
-      // Call setConfig
       const config = await errsoleMySQL.setConfig('logsTTL', '2592000000');
 
-      // Define the expected query string without line breaks
-      const expectedQuery = `INSERT INTO \`${configTable}\` (\`key\`, \`value\`) VALUES (?, ?) ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)`;
-
-      // Assert that the second call to pool.query was the insert/update query
-      expect(poolMock.query).toHaveBeenNthCalledWith(
-        2,
-        expect.stringContaining(`INSERT INTO \`${configTable}\``),
+      expect(poolMock.query).toHaveBeenCalledWith(
+        'INSERT INTO errsole_config (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)',
         ['logsTTL', '2592000000'],
         expect.any(Function)
       );
-
-      // Assert the returned configuration
       expect(config).toEqual({ item: { key: 'logsTTL', value: '2592000000' } });
     });
 
     it('should insert a new configuration if it does not exist', async () => {
-      const configTable = `${errsoleMySQL.tablePrefix}_config`;
-
-      // Mock successful insertion/update
       poolMock.query.mockImplementation((query, values, cb) => cb(null, { affectedRows: 1 }));
-
-      // Mock getConfig to return the new configuration after insertion
       jest.spyOn(errsoleMySQL, 'getConfig').mockResolvedValue({ item: { key: 'newKey', value: 'newValue' } });
 
-      // Call setConfig
       const config = await errsoleMySQL.setConfig('newKey', 'newValue');
 
-      // Define the expected query string without line breaks
-      const expectedQuery = `INSERT INTO \`${configTable}\` (\`key\`, \`value\`) VALUES (?, ?) ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)`;
-
-      // Assert that the second call to pool.query was the insert/update query
-      expect(poolMock.query).toHaveBeenNthCalledWith(
-        2,
-        expect.stringContaining(`INSERT INTO \`${configTable}\``),
+      expect(poolMock.query).toHaveBeenCalledWith(
+        'INSERT INTO errsole_config (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)',
         ['newKey', 'newValue'],
         expect.any(Function)
       );
-
-      // Assert the returned configuration
       expect(config).toEqual({ item: { key: 'newKey', value: 'newValue' } });
     });
 
     it('should handle errors in setting configuration', async () => {
-      const configTable = `${errsoleMySQL.tablePrefix}_config`;
-
-      // Mock a query error
       poolMock.query.mockImplementation((query, values, cb) => cb(new Error('Query error')));
 
-      // Call setConfig and expect it to throw an error
       await expect(errsoleMySQL.setConfig('newKey', 'newValue')).rejects.toThrow('Query error');
+    });
+  });
 
-      // Assert that the second call was the insert/update query
-      expect(poolMock.query).toHaveBeenNthCalledWith(
-        2,
-        expect.stringContaining(`INSERT INTO \`${configTable}\``),
-        ['newKey', 'newValue'],
-        expect.any(Function)
-      );
+  describe('#deleteConfig', () => {
+    it('should delete config', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => cb(null, { affectedRows: 1 }));
+
+      await errsoleMySQL.deleteConfig('logsTTL');
+
+      expect(poolMock.query).toHaveBeenCalledWith('DELETE FROM errsole_config WHERE `key` = ?', ['logsTTL'], expect.any(Function));
+    });
+
+    it('should throw error if config not found', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => cb(null, { affectedRows: 0 }));
+
+      await expect(errsoleMySQL.deleteConfig('logsTTL')).rejects.toThrow('Configuration not found.');
     });
   });
 
