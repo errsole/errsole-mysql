@@ -47,13 +47,11 @@ describe('ErrsoleMySQL', () => {
       queueLimit: 0
     });
 
-    // Mock setInterval and cron.schedule
     jest.useFakeTimers();
     jest.spyOn(global, 'setInterval');
     cronJob = { stop: jest.fn() };
     jest.spyOn(cron, 'schedule').mockReturnValue(cronJob);
 
-    // Suppress console.error
     originalConsoleError = console.error;
     console.error = jest.fn();
   });
@@ -61,13 +59,10 @@ describe('ErrsoleMySQL', () => {
   afterEach(() => {
     jest.clearAllMocks();
     jest.useRealTimers();
-    // Restore console.error
     console.error = originalConsoleError;
-    // Clear the interval if it was set
     if (errsoleMySQL.flushIntervalId) {
       clearInterval(errsoleMySQL.flushIntervalId);
     }
-    // Stop the cron job
     if (cronJob) {
       cronJob.stop();
     }
@@ -983,7 +978,6 @@ describe('ErrsoleMySQL', () => {
 
     it('should return an empty array if no hostnames are found', async () => {
       poolMock.query.mockImplementation((query, callback) => {
-        // Mock the query response
         callback(null, []);
       });
 
@@ -998,7 +992,6 @@ describe('ErrsoleMySQL', () => {
 
     it('should handle database query errors gracefully', async () => {
       poolMock.query.mockImplementation((query, callback) => {
-        // Simulate a query error
         callback(new Error('Query error'));
       });
 
@@ -1165,11 +1158,10 @@ describe('ErrsoleMySQL', () => {
         updated_at: new Date()
       };
 
-      // Mock fetching previous notification
       connectionMock.query
-        .mockImplementationOnce((query, values, cb) => cb(null, [previousNotification])) // Fetch previous notification
-        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 })) // Insert notification
-        .mockImplementationOnce((query, values, cb) => cb(null, [{ notificationCount: 2 }])); // Count today's notifications
+        .mockImplementationOnce((query, values, cb) => cb(null, [previousNotification]))
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 }))
+        .mockImplementationOnce((query, values, cb) => cb(null, [{ notificationCount: 2 }]));
 
       const notification = {
         errsole_id: 123,
@@ -1181,7 +1173,6 @@ describe('ErrsoleMySQL', () => {
 
       expect(connectionMock.beginTransaction).toHaveBeenCalled();
 
-      // Check fetching previous notification
       expect(connectionMock.query).toHaveBeenNthCalledWith(
         1,
         expect.stringContaining('SELECT * FROM errsole_notifications'),
@@ -1196,7 +1187,6 @@ describe('ErrsoleMySQL', () => {
         expect.any(Function)
       );
 
-      // Check counting today's notifications
       expect(connectionMock.query).toHaveBeenNthCalledWith(
         3,
         expect.stringContaining('SELECT COUNT(*) AS notificationCount'),
@@ -1223,11 +1213,10 @@ describe('ErrsoleMySQL', () => {
         updated_at: new Date('2024-10-17T10:44:44Z')
       };
 
-      // Mock fetching previous notification
       connectionMock.query
-        .mockImplementationOnce((query, values, cb) => cb(null, [previousNotification])) // Fetch previous notification
-        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 })) // Insert notification
-        .mockImplementationOnce((query, values, cb) => cb(null, [{ notificationCount: 1 }])); // Count today's notifications
+        .mockImplementationOnce((query, values, cb) => cb(null, [previousNotification]))
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 }))
+        .mockImplementationOnce((query, values, cb) => cb(null, [{ notificationCount: 1 }]));
 
       const notification = {
         errsole_id: 123,
@@ -1239,7 +1228,6 @@ describe('ErrsoleMySQL', () => {
 
       expect(connectionMock.beginTransaction).toHaveBeenCalled();
 
-      // Check fetching previous notification
       expect(connectionMock.query).toHaveBeenNthCalledWith(
         1,
         expect.stringContaining('SELECT * FROM errsole_notifications'),
@@ -1250,11 +1238,10 @@ describe('ErrsoleMySQL', () => {
       expect(connectionMock.query).toHaveBeenNthCalledWith(
         2,
         expect.stringContaining('INSERT INTO errsole_notifications'),
-        [notification.errsole_id, notification.hostname, notification.hashed_message], // Adjusted order
+        [notification.errsole_id, notification.hostname, notification.hashed_message],
         expect.any(Function)
       );
 
-      // Check counting today's notifications
       expect(connectionMock.query).toHaveBeenNthCalledWith(
         3,
         expect.stringContaining('SELECT COUNT(*) AS notificationCount'),
@@ -1272,7 +1259,6 @@ describe('ErrsoleMySQL', () => {
     });
 
     it('should handle errors during transaction start', async () => {
-      // Mock error in beginning transaction
       connectionMock.beginTransaction.mockImplementationOnce((cb) => cb(new Error('Transaction start error')));
 
       const notification = {
@@ -1284,12 +1270,11 @@ describe('ErrsoleMySQL', () => {
       await expect(errsoleMySQL.insertNotificationItem(notification)).rejects.toThrow('Transaction start error');
 
       expect(connectionMock.beginTransaction).toHaveBeenCalled();
-      expect(connectionMock.rollback).toHaveBeenCalled(); // Adjusted expectation
+      expect(connectionMock.rollback).toHaveBeenCalled();
       expect(connectionMock.release).toHaveBeenCalled();
     });
 
     it('should handle errors while fetching previous notification', async () => {
-      // Mock error in fetching previous notification
       connectionMock.query
         .mockImplementationOnce((query, values, cb) => cb(new Error('Fetch error')));
 
@@ -1303,7 +1288,6 @@ describe('ErrsoleMySQL', () => {
 
       expect(connectionMock.beginTransaction).toHaveBeenCalled();
 
-      // Check fetching previous notification
       expect(connectionMock.query).toHaveBeenNthCalledWith(
         1,
         expect.stringContaining('SELECT * FROM errsole_notifications'),
@@ -1311,16 +1295,14 @@ describe('ErrsoleMySQL', () => {
         expect.any(Function)
       );
 
-      // Ensure rollback and release are called
       expect(connectionMock.rollback).toHaveBeenCalled();
       expect(connectionMock.release).toHaveBeenCalled();
     });
 
     it('should handle errors during notification insertion', async () => {
-      // Mock fetching previous notification successfully
       connectionMock.query
-        .mockImplementationOnce((query, values, cb) => cb(null, [])) // Fetch previous notification
-        .mockImplementationOnce((query, values, cb) => cb(new Error('Insert error'))); // Insert notification
+        .mockImplementationOnce((query, values, cb) => cb(null, []))
+        .mockImplementationOnce((query, values, cb) => cb(new Error('Insert error')));
 
       const notification = {
         errsole_id: 123,
@@ -1332,7 +1314,6 @@ describe('ErrsoleMySQL', () => {
 
       expect(connectionMock.beginTransaction).toHaveBeenCalled();
 
-      // Check fetching previous notification
       expect(connectionMock.query).toHaveBeenNthCalledWith(
         1,
         expect.stringContaining('SELECT * FROM errsole_notifications'),
@@ -1347,17 +1328,15 @@ describe('ErrsoleMySQL', () => {
         expect.any(Function)
       );
 
-      // Ensure rollback and release are called
       expect(connectionMock.rollback).toHaveBeenCalled();
       expect(connectionMock.release).toHaveBeenCalled();
     });
 
     it('should handle errors while counting today\'s notifications', async () => {
-      // Mock fetching previous notification and inserting successfully
       connectionMock.query
-        .mockImplementationOnce((query, values, cb) => cb(null, [])) // Fetch previous notification
-        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 })) // Insert notification
-        .mockImplementationOnce((query, values, cb) => cb(new Error('Count error'))); // Count today's notifications
+        .mockImplementationOnce((query, values, cb) => cb(null, []))
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 }))
+        .mockImplementationOnce((query, values, cb) => cb(new Error('Count error')));
 
       const notification = {
         errsole_id: 123,
@@ -1369,7 +1348,6 @@ describe('ErrsoleMySQL', () => {
 
       expect(connectionMock.beginTransaction).toHaveBeenCalled();
 
-      // Check fetching previous notification
       expect(connectionMock.query).toHaveBeenNthCalledWith(
         1,
         expect.stringContaining('SELECT * FROM errsole_notifications'),
@@ -1384,7 +1362,6 @@ describe('ErrsoleMySQL', () => {
         expect.any(Function)
       );
 
-      // Check counting today's notifications
       expect(connectionMock.query).toHaveBeenNthCalledWith(
         3,
         expect.stringContaining('SELECT COUNT(*) AS notificationCount'),
@@ -1392,19 +1369,16 @@ describe('ErrsoleMySQL', () => {
         expect.any(Function)
       );
 
-      // Ensure rollback and release are called
       expect(connectionMock.rollback).toHaveBeenCalled();
       expect(connectionMock.release).toHaveBeenCalled();
     });
 
     it('should handle errors during transaction commit', async () => {
-      // Mock fetching previous notification and inserting successfully
       connectionMock.query
-        .mockImplementationOnce((query, values, cb) => cb(null, [])) // Fetch previous notification
-        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 })) // Insert notification
-        .mockImplementationOnce((query, values, cb) => cb(null, [{ notificationCount: 1 }])); // Count today's notifications
+        .mockImplementationOnce((query, values, cb) => cb(null, []))
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 }))
+        .mockImplementationOnce((query, values, cb) => cb(null, [{ notificationCount: 1 }]));
 
-      // Mock commit error
       connectionMock.commit.mockImplementationOnce((cb) => cb(new Error('Commit error')));
 
       const notification = {
@@ -1417,7 +1391,6 @@ describe('ErrsoleMySQL', () => {
 
       expect(connectionMock.beginTransaction).toHaveBeenCalled();
 
-      // Check fetching previous notification
       expect(connectionMock.query).toHaveBeenNthCalledWith(
         1,
         expect.stringContaining('SELECT * FROM errsole_notifications'),
@@ -1425,22 +1398,13 @@ describe('ErrsoleMySQL', () => {
         expect.any(Function)
       );
 
-      // Check inserting new notification
-      // expect(connectionMock.query).toHaveBeenNthCalledWith(
-      //   2,
-      //   expect.stringContaining('INSERT INTO errsole_notifications'),
-      //   [notification.errsole_id, notification.hostname, notification.hashed_message], // Adjusted order
-      //   expect.any(Function)
-      // );
-
       expect(connectionMock.query).toHaveBeenNthCalledWith(
         2,
         expect.stringContaining('INSERT INTO errsole_notifications'),
-        [notification.errsole_id, notification.hostname, notification.hashed_message], // Adjusted order to match function
+        [notification.errsole_id, notification.hostname, notification.hashed_message],
         expect.any(Function)
       );
 
-      // Check counting today's notifications
       expect(connectionMock.query).toHaveBeenNthCalledWith(
         3,
         expect.stringContaining('SELECT COUNT(*) AS notificationCount'),
@@ -1448,23 +1412,19 @@ describe('ErrsoleMySQL', () => {
         expect.any(Function)
       );
 
-      // Ensure commit was called
       expect(connectionMock.commit).toHaveBeenCalled();
 
-      // Ensure rollback was called due to commit error
       expect(connectionMock.rollback).toHaveBeenCalled();
 
       expect(connectionMock.release).toHaveBeenCalled();
     });
 
     it('should rollback the transaction if any step fails', async () => {
-      // Mock fetching previous notification and inserting successfully
       connectionMock.query
-        .mockImplementationOnce((query, values, cb) => cb(null, [])) // Fetch previous notification
-        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 })) // Insert notification
-        .mockImplementationOnce((query, values, cb) => cb(null, [{ notificationCount: 1 }])); // Count today's notifications
+        .mockImplementationOnce((query, values, cb) => cb(null, []))
+        .mockImplementationOnce((query, values, cb) => cb(null, { affectedRows: 1 }))
+        .mockImplementationOnce((query, values, cb) => cb(null, [{ notificationCount: 1 }]));
 
-      // Mock commit failure
       connectionMock.commit.mockImplementationOnce((cb) => cb(new Error('Commit failed')));
 
       const notification = {
@@ -1490,10 +1450,8 @@ describe('ErrsoleMySQL', () => {
     let consoleErrorSpy;
 
     beforeEach(() => {
-      // Spy on getConfig method and mock its implementation
       getConfigSpy = jest.spyOn(errsoleMySQL, 'getConfig').mockResolvedValue({ item: null });
 
-      // Spy on pool.query method with specific implementations
       poolQuerySpy = jest.spyOn(poolMock, 'query').mockImplementation((query, values, cb) => {
         if (typeof values === 'function') {
           cb = values;
@@ -1501,24 +1459,18 @@ describe('ErrsoleMySQL', () => {
         }
 
         if (query.includes('DELETE FROM errsole_notifications')) {
-          // Default behavior: delete 0 rows
           cb(null, { affectedRows: 0 });
         } else {
-          // Handle any other queries if necessary
           cb(null, []);
         }
       });
 
-      // Mock setTimeout to immediately invoke the callback
       setTimeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation((cb) => cb());
 
-      // Spy on console.error
       consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
-      // Ensure the running flag is false before each test
       errsoleMySQL.deleteExpiredNotificationItemsRunning = false;
 
-      // Clear any previous calls to poolQuerySpy to isolate tests
       poolQuerySpy.mockClear();
     });
 
@@ -1528,27 +1480,21 @@ describe('ErrsoleMySQL', () => {
     });
 
     it('should not run if deleteExpiredNotificationItems is already running', async () => {
-      // Set the running flag to true to simulate concurrent execution
       errsoleMySQL.deleteExpiredNotificationItemsRunning = true;
 
       await errsoleMySQL.deleteExpiredNotificationItems();
 
-      // Expect that deleteExpiredNotificationItems does not perform any deletion
       expect(getConfigSpy).not.toHaveBeenCalled();
       expect(poolQuerySpy).not.toHaveBeenCalled();
     });
 
     it('should set deleteExpiredNotificationItemsRunning to true during execution and reset after', async () => {
-      // Mock getConfig to return null (use default TTL)
       getConfigSpy.mockResolvedValue({ item: null });
 
-      // Mock pool.query to delete 0 rows, so the loop exits after one iteration
       poolQuerySpy.mockImplementationOnce((query, values, cb) => {
-        // Validate the SQL query and parameters
         const expectedSQL = 'DELETE FROM errsole_notifications WHERE created_at < ? LIMIT 1000';
         expect(query).toBe(expectedSQL);
 
-        // Calculate expected expirationTime based on default TTL (30 days)
         const expectedExpirationTime = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000))
           .toISOString().slice(0, 19).replace('T', ' ');
 
@@ -1559,26 +1505,20 @@ describe('ErrsoleMySQL', () => {
 
       await errsoleMySQL.deleteExpiredNotificationItems();
 
-      // Expect the running flag to be reset
       expect(errsoleMySQL.deleteExpiredNotificationItemsRunning).toBe(false);
 
-      // Ensure getConfig was called once
       expect(getConfigSpy).toHaveBeenCalledTimes(1);
       expect(getConfigSpy).toHaveBeenCalledWith('logsTTL');
 
-      // Ensure pool.query was called once
       expect(poolQuerySpy).toHaveBeenCalledTimes(1);
     });
 
     it('should use default TTL if config is not found', async () => {
-      // Mock getConfig to return null (use default TTL)
       getConfigSpy.mockResolvedValue({ item: null });
 
-      // Mock pool.query to delete 0 rows
       poolQuerySpy.mockImplementationOnce((query, values, cb) => {
         const [expirationTime] = values;
 
-        // Calculate expected expirationTime based on default TTL (30 days)
         const expectedExpirationTime = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000))
           .toISOString().slice(0, 19).replace('T', ' ');
 
@@ -1589,19 +1529,16 @@ describe('ErrsoleMySQL', () => {
 
       await errsoleMySQL.deleteExpiredNotificationItems();
 
-      // Ensure pool.query was called once
       expect(poolQuerySpy).toHaveBeenCalledTimes(1);
     });
 
     it('should use configured TTL if config is present and valid', async () => {
-      const customTTL = 15 * 24 * 60 * 60 * 1000; // 15 days in milliseconds
+      const customTTL = 15 * 24 * 60 * 60 * 1000;
       getConfigSpy.mockResolvedValue({ item: { value: customTTL.toString() } });
 
-      // Mock pool.query to delete 0 rows
       poolQuerySpy.mockImplementationOnce((query, values, cb) => {
         const [expirationTime] = values;
 
-        // Calculate expected expirationTime based on custom TTL (15 days)
         const expectedExpirationTime = new Date(Date.now() - customTTL)
           .toISOString().slice(0, 19).replace('T', ' ');
 
@@ -1612,18 +1549,15 @@ describe('ErrsoleMySQL', () => {
 
       await errsoleMySQL.deleteExpiredNotificationItems();
 
-      // Ensure pool.query was called once
       expect(poolQuerySpy).toHaveBeenCalledTimes(1);
     });
 
     it('should use default TTL if configured TTL is invalid', async () => {
-      getConfigSpy.mockResolvedValue({ item: { value: 'invalid' } }); // Invalid TTL
+      getConfigSpy.mockResolvedValue({ item: { value: 'invalid' } });
 
-      // Mock pool.query to delete 0 rows
       poolQuerySpy.mockImplementationOnce((query, values, cb) => {
         const [expirationTime] = values;
 
-        // Calculate expected expirationTime based on default TTL (30 days)
         const expectedExpirationTime = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000))
           .toISOString().slice(0, 19).replace('T', ' ');
 
@@ -1634,14 +1568,12 @@ describe('ErrsoleMySQL', () => {
 
       await errsoleMySQL.deleteExpiredNotificationItems();
 
-      // Ensure pool.query was called once
       expect(poolQuerySpy).toHaveBeenCalledTimes(1);
     });
 
     it('should delete expired notifications in batches until none are left', async () => {
-      getConfigSpy.mockResolvedValue({ item: null }); // Use default TTL
+      getConfigSpy.mockResolvedValue({ item: null });
 
-      // Simulate two deletion batches: first deletes 1000 rows, second deletes 0 rows
       poolQuerySpy
         .mockImplementationOnce((query, values, cb) => {
           cb(null, { affectedRows: 1000 });
@@ -1652,14 +1584,12 @@ describe('ErrsoleMySQL', () => {
 
       await errsoleMySQL.deleteExpiredNotificationItems();
 
-      // Ensure pool.query was called twice
       expect(poolQuerySpy).toHaveBeenCalledTimes(2);
     });
 
     it('should handle query errors gracefully', async () => {
-      getConfigSpy.mockResolvedValue({ item: null }); // Use default TTL
+      getConfigSpy.mockResolvedValue({ item: null });
 
-      // Simulate first deletion batch deleting 1000 rows, second batch failing
       poolQuerySpy
         .mockImplementationOnce((query, values, cb) => {
           cb(null, { affectedRows: 1000 });
@@ -1670,45 +1600,37 @@ describe('ErrsoleMySQL', () => {
 
       await errsoleMySQL.deleteExpiredNotificationItems();
 
-      // Ensure pool.query was called twice
       expect(poolQuerySpy).toHaveBeenCalledTimes(2);
 
-      // Ensure console.error was called with the error
       expect(consoleErrorSpy).toHaveBeenCalledWith(new Error('Delete error'));
     });
 
     it('should reset deleteExpiredNotificationItemsRunning flag after successful execution', async () => {
-      getConfigSpy.mockResolvedValue({ item: null }); // Use default TTL
+      getConfigSpy.mockResolvedValue({ item: null });
 
-      // Mock pool.query to delete 0 rows
       poolQuerySpy.mockImplementationOnce((query, values, cb) => {
         cb(null, { affectedRows: 0 });
       });
 
       await errsoleMySQL.deleteExpiredNotificationItems();
 
-      // Ensure the running flag is reset
       expect(errsoleMySQL.deleteExpiredNotificationItemsRunning).toBe(false);
     });
 
     it('should reset deleteExpiredNotificationItemsRunning flag after execution with errors', async () => {
-      getConfigSpy.mockResolvedValue({ item: null }); // Use default TTL
+      getConfigSpy.mockResolvedValue({ item: null });
 
-      // Simulate a query error
       poolQuerySpy.mockImplementationOnce((query, values, cb) => cb(new Error('Delete error')));
 
       await errsoleMySQL.deleteExpiredNotificationItems();
 
-      // Ensure the running flag is reset
       expect(errsoleMySQL.deleteExpiredNotificationItemsRunning).toBe(false);
 
-      // Ensure console.error was called with the error
       expect(consoleErrorSpy).toHaveBeenCalledWith(new Error('Delete error'));
     });
   });
 
   afterAll(() => {
-    // Ensure to clear any remaining intervals and cron jobs
     if (errsoleMySQL.flushIntervalId) {
       clearInterval(errsoleMySQL.flushIntervalId);
     }
