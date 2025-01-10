@@ -1630,6 +1630,39 @@ describe('ErrsoleMySQL', () => {
     });
   });
 
+  describe('#DeleteAllLogs', () => {
+    let poolQuerySpy;
+  
+    beforeEach(() => {
+      poolQuerySpy = jest.spyOn(poolMock, 'query');
+    });
+  
+    afterEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    it('should delete all logs from the logs table', async () => {
+      poolQuerySpy.mockImplementation((query, cb) => {
+        expect(query).toBe('DELETE FROM errsole_logs_v2');
+        cb(null, { affectedRows: 100 });
+      });
+  
+      await expect(errsoleMySQL.DeleteAllLogs()).resolves.toBeUndefined();
+  
+      expect(poolQuerySpy).toHaveBeenCalledWith('DELETE FROM errsole_logs_v2', expect.any(Function));
+    });
+  
+    it('should handle query errors gracefully', async () => {
+      const error = new Error('Query error');
+      poolQuerySpy.mockImplementation((query, cb) => cb(error));
+  
+      await expect(errsoleMySQL.DeleteAllLogs()).rejects.toThrow('Query error');
+  
+      expect(poolQuerySpy).toHaveBeenCalledWith('DELETE FROM errsole_logs_v2', expect.any(Function));
+    });
+  });
+  
+
   afterAll(() => {
     if (errsoleMySQL.flushIntervalId) {
       clearInterval(errsoleMySQL.flushIntervalId);
