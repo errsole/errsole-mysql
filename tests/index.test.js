@@ -1647,7 +1647,7 @@ describe('ErrsoleMySQL', () => {
         cb(null, { affectedRows: 100 });
       });
 
-      await expect(errsoleMySQL.DeleteAllLogs()).resolves.toBeUndefined();
+      await expect(errsoleMySQL.deleteAllLogs()).resolves.toEqual({});
 
       expect(poolQuerySpy).toHaveBeenCalledWith('TRUNCATE TABLE errsole_logs_v2', expect.any(Function));
     });
@@ -1656,7 +1656,7 @@ describe('ErrsoleMySQL', () => {
       const error = new Error('Query error');
       poolQuerySpy.mockImplementation((query, cb) => cb(error));
 
-      await expect(errsoleMySQL.DeleteAllLogs()).rejects.toThrow('Query error');
+      await expect(errsoleMySQL.deleteAllLogs()).rejects.toThrow('Query error');
 
       expect(poolQuerySpy).toHaveBeenCalledWith('TRUNCATE TABLE errsole_logs_v2', expect.any(Function));
     });
