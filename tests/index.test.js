@@ -449,6 +449,88 @@ describe('ErrsoleMySQL', () => {
     });
   });
 
+  describe('#searchLogs', () => {
+    it('should perform a full-text search with search terms', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => {
+        expect(query).toContain('MATCH(message) AGAINST');
+
+        // Fix: Update expected values to match the function's actual output
+        expect(values).toEqual(['+\"error\" +\"failed\"', 100]);
+
+        cb(null, [{ id: 1, message: 'error failed' }]);
+      });
+
+      const logs = await errsoleMySQL.searchLogs(['error', 'failed']);
+
+      expect(logs).toEqual({
+        items: [{ id: 1, message: 'error failed' }],
+        filters: { limit: 100 }
+      });
+    });
+
+    it('should apply errsole_id filter', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => {
+        expect(query).toContain('errsole_id = ?');
+        expect(values).toEqual(['123abc', 100]);
+        cb(null, [{ id: 1, errsole_id: '123abc' }]);
+      });
+
+      const logs = await errsoleMySQL.searchLogs([], { errsole_id: '123abc' });
+      expect(logs).toEqual({ items: [{ id: 1, errsole_id: '123abc' }], filters: { errsole_id: '123abc', limit: 100 } });
+    });
+
+    it('should apply lt_id and gt_id filters', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => {
+        expect(query).toContain('id < ?');
+        expect(values).toEqual([10, 100]);
+        cb(null, [{ id: 9 }]);
+      });
+
+      const logs = await errsoleMySQL.searchLogs([], { lt_id: 10 });
+      expect(logs).toEqual({ items: [{ id: 9 }], filters: { lt_id: 10, limit: 100 } });
+    });
+
+    it('should handle query errors gracefully', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => {
+        cb(new Error('Query error'));
+      });
+
+      await expect(errsoleMySQL.searchLogs(['error'])).rejects.toThrow('Query error');
+    });
+
+    it('should apply hostname filter', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => {
+        expect(query).toContain('hostname IN (?)');
+        expect(values).toEqual([['localhost'], 100]);
+        cb(null, [{ id: 1, hostname: 'localhost' }]);
+      });
+
+      const logs = await errsoleMySQL.searchLogs([], { hostnames: ['localhost'] });
+      expect(logs).toEqual({ items: [{ id: 1, hostname: 'localhost' }], filters: { hostnames: ['localhost'], limit: 100 } });
+    });
+    it('should apply timestamp filters', async () => {
+      const gteTimestamp = new Date('2023-01-01T00:00:00.000Z');
+      const lteTimestamp = new Date('2023-01-02T00:00:00.000Z');
+
+      poolMock.query.mockImplementation((query, values, cb) => {
+        expect(query).toContain('timestamp >= ?');
+        expect(query).toContain('timestamp <= ?');
+
+        // Ensure timestamps and limit are correctly passed
+        expect(values).toEqual(expect.arrayContaining([gteTimestamp, lteTimestamp, 100]));
+
+        cb(null, [{ id: 1, timestamp: '2023-01-01T00:00:00Z' }]);
+      });
+
+      const logs = await errsoleMySQL.searchLogs([], { gte_timestamp: gteTimestamp, lte_timestamp: lteTimestamp });
+
+      expect(logs).toEqual({
+        items: [{ id: 1, timestamp: '2023-01-01T00:00:00Z' }],
+        filters: { gte_timestamp: gteTimestamp, lte_timestamp: lteTimestamp, limit: 100 } // FIX: Use snake_case keys
+      });
+    });
+  });
+
   describe('#verifyUser', () => {
     it('should throw an error if email or password is missing', async () => {
       await expect(errsoleMySQL.verifyUser('', 'password')).rejects.toThrow('Both email and password are required for verification.');
