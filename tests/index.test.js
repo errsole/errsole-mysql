@@ -490,6 +490,76 @@ describe('ErrsoleMySQL', () => {
       expect(logs).toEqual({ items: [{ id: 9 }], filters: { lt_id: 10, limit: 100 } });
     });
 
+    it('should apply gt_id filter', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => {
+        expect(query).toContain('id > ?');
+        expect(values).toEqual([5, 100]);
+        cb(null, [{ id: 6 }]);
+      });
+
+      const logs = await errsoleMySQL.searchLogs([], { gt_id: 5 });
+      expect(logs).toEqual({ items: [{ id: 6 }], filters: { gt_id: 5, limit: 100 } });
+    });
+
+    it('should apply lt_id filter', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => {
+        expect(query).toContain('id < ?');
+        expect(values).toEqual([10, 100]);
+        cb(null, [{ id: 9 }]);
+      });
+
+      const logs = await errsoleMySQL.searchLogs([], { lt_id: 10 });
+      expect(logs).toEqual({ items: [{ id: 9 }], filters: { lt_id: 10, limit: 100 } });
+    });
+
+    it('should apply timestamp range when only lte_timestamp is provided', async () => {
+      const lteTimestamp = new Date('2023-01-02T00:00:00.000Z');
+      const gteTimestamp = new Date(lteTimestamp.getTime() - 24 * 60 * 60 * 1000);
+
+      poolMock.query.mockImplementation((query, values, cb) => {
+        expect(query).toContain('timestamp >= ?');
+        expect(query).toContain('timestamp <= ?');
+        expect(values).toEqual([lteTimestamp, gteTimestamp, 100]); // Adjusting expected order
+        cb(null, [{ id: 1, timestamp: '2023-01-01T00:00:00Z' }]);
+      });
+
+      const logs = await errsoleMySQL.searchLogs([], { lte_timestamp: lteTimestamp });
+
+      expect(logs).toEqual({
+        items: [{ id: 1, timestamp: '2023-01-01T00:00:00Z' }],
+        filters: { gte_timestamp: gteTimestamp, lte_timestamp: lteTimestamp, limit: 100 }
+      });
+    });
+
+    it('should apply timestamp range when only gte_timestamp is provided', async () => {
+      const gteTimestamp = new Date('2023-01-01T00:00:00.000Z');
+      const lteTimestamp = new Date(gteTimestamp.getTime() + 24 * 60 * 60 * 1000);
+
+      poolMock.query.mockImplementation((query, values, cb) => {
+        expect(query).toContain('timestamp <= ?');
+        expect(values).toEqual([gteTimestamp, lteTimestamp, 100]);
+        cb(null, [{ id: 1, timestamp: '2023-01-02T00:00:00Z' }]);
+      });
+
+      const logs = await errsoleMySQL.searchLogs([], { gte_timestamp: gteTimestamp });
+
+      expect(logs).toEqual({
+        items: [{ id: 1, timestamp: '2023-01-02T00:00:00Z' }],
+        filters: { gte_timestamp: gteTimestamp, lte_timestamp: lteTimestamp, limit: 100 }
+      });
+    });
+
+    it('should apply level_json filter', async () => {
+      poolMock.query.mockImplementation((query, values, cb) => {
+        expect(query).toContain('(source = ? AND level = ?)');
+        expect(values).toEqual(['app', 'error', 'database', 'warn', 100]);
+        cb(null, [{ id: 1, source: 'app', level: 'error' }]);
+      });
+
+      const logs = await errsoleMySQL.searchLogs([], { level_json: [{ source: 'app', level: 'error' }, { source: 'database', level: 'warn' }] });
+      expect(logs).toEqual({ items: [{ id: 1, source: 'app', level: 'error' }], filters: { level_json: [{ source: 'app', level: 'error' }, { source: 'database', level: 'warn' }], limit: 100 } });
+    });
+
     it('should handle query errors gracefully', async () => {
       poolMock.query.mockImplementation((query, values, cb) => {
         cb(new Error('Query error'));
