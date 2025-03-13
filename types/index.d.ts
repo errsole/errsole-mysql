@@ -60,7 +60,7 @@ declare module 'errsole-mysql' {
     postLogs(logEntries: Log[]): Promise<{}>;
     getLogs(filters?: LogFilter): Promise<{ items: Log[] }>;
     searchLogs(searchTerms: string[], filters?: LogFilter): Promise<{ items: Log[], filters: LogFilter[] }>;
-    DeleteAllLogs(): Promise<void>;
+    deleteAllLogs(): Promise<void>;
     getMeta(id: number): Promise<{ item: { id: number; meta: string } }>;
 
     createUser(user: { name: string; email: string; password: string; role: string }): Promise<{ item: User }>;
